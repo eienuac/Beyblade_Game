@@ -1,0 +1,19 @@
+# Unity Geçici Klasörleri
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+
+# Visual Studio / Cursor / VS Code Geçici Dosyaları
+.vs/
+.idea/
+.vscode/
+*.csproj
+*.sln
+
+# İşletim Sistemi Dosyaları
+.DS_Store
+Thumbs.db
