@@ -65,31 +65,7 @@ public class ArenaGenerator : MonoBehaviour
                 GenerateArena();
             }
 
-            // Arenayı zorla Koyu Kırmızı yap
-            MeshRenderer mr = GetComponent<MeshRenderer>();
-            if (mr != null)
-            {
-                MaterialPropertyBlock block = new MaterialPropertyBlock();
-                block.SetColor("_BaseColor", new Color(0.8f, 0.1f, 0.1f));
-                block.SetColor("_Color", new Color(0.8f, 0.1f, 0.1f));
-                block.SetFloat("_Smoothness", 0.3f);
-                mr.SetPropertyBlock(block);
-            }
-
-            // Oyuncu Beyblade'ini zorla Mavi yap
-            GameObject player = GameObject.Find("PlayerBeyblade");
-            if (player != null)
-            {
-                MeshRenderer pr = player.GetComponent<MeshRenderer>();
-                if (pr != null)
-                {
-                    MaterialPropertyBlock pblock = new MaterialPropertyBlock();
-                    pblock.SetColor("_BaseColor", new Color(0.1f, 0.4f, 1f));
-                    pblock.SetColor("_Color", new Color(0.1f, 0.4f, 1f));
-                    pr.SetPropertyBlock(pblock);
-                }
-            }
-            
+            // Renk/tint zorlaması kaldırıldı — orijinal / URP materyal kalsın
             hasFixedVisuals = true;
         }
     }

@@ -174,10 +174,11 @@ public class SpinEffect : MonoBehaviour
         obj.transform.SetParent(parent, false);
         obj.transform.localPosition = new Vector3(0f, 0.05f, 0f);
         ParticleSystem ps = obj.AddComponent<ParticleSystem>();
+        ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
 
         var main = ps.main;
+        main.playOnAwake = false;
         main.loop = true;
-        main.playOnAwake = true;
         main.duration = 1f;
         main.startLifetime = 0.28f;
         main.startSpeed = 0f;
@@ -230,6 +231,7 @@ public class SpinEffect : MonoBehaviour
         vel.orbitalY = 2.5f;
 
         ApplyRenderer(ps, ParticleSystemRenderMode.Billboard);
+        ps.Play();
         return ps;
     }
 
@@ -239,10 +241,12 @@ public class SpinEffect : MonoBehaviour
         obj.transform.SetParent(parent, false);
         obj.transform.localPosition = new Vector3(0f, 0.02f, 0f);
         ParticleSystem ps = obj.AddComponent<ParticleSystem>();
+        ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
 
         var main = ps.main;
-        main.loop = true;
         main.playOnAwake = false;
+        main.loop = true;
+        main.duration = 1f;
         main.startLifetime = new ParticleSystem.MinMaxCurve(0.12f, 0.28f);
         main.startSpeed = new ParticleSystem.MinMaxCurve(1.2f, 3.2f);
         main.startSize = new ParticleSystem.MinMaxCurve(0.02f, 0.05f);
@@ -273,10 +277,12 @@ public class SpinEffect : MonoBehaviour
         GameObject obj = new GameObject("ImpactSparks");
         obj.transform.SetParent(parent, false);
         ParticleSystem ps = obj.AddComponent<ParticleSystem>();
+        ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
 
         var main = ps.main;
-        main.loop = false;
         main.playOnAwake = false;
+        main.loop = false;
+        main.duration = 0.5f;
         main.startLifetime = new ParticleSystem.MinMaxCurve(0.18f, 0.4f);
         main.startSpeed = new ParticleSystem.MinMaxCurve(4f, 10f);
         main.startSize = new ParticleSystem.MinMaxCurve(0.03f, 0.07f);
@@ -316,10 +322,12 @@ public class SpinEffect : MonoBehaviour
         GameObject obj = new GameObject("Shockwave");
         obj.transform.SetParent(parent, false);
         ParticleSystem ps = obj.AddComponent<ParticleSystem>();
+        ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
 
         var main = ps.main;
-        main.loop = false;
         main.playOnAwake = false;
+        main.loop = false;
+        main.duration = 0.4f;
         main.startLifetime = 0.28f;
         main.startSpeed = 0f;
         main.startSize = 0.4f;
@@ -364,10 +372,12 @@ public class SpinEffect : MonoBehaviour
         GameObject obj = new GameObject("ImpactFlash");
         obj.transform.SetParent(parent, false);
         ParticleSystem ps = obj.AddComponent<ParticleSystem>();
+        ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
 
         var main = ps.main;
-        main.loop = false;
         main.playOnAwake = false;
+        main.loop = false;
+        main.duration = 0.25f;
         main.startLifetime = 0.12f;
         main.startSpeed = 0f;
         main.startSize = 0.9f;
@@ -484,6 +494,7 @@ public class SpinEffect : MonoBehaviour
 
         if (impactSparks != null)
         {
+            impactSparks.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             impactSparks.transform.position = worldPoint;
             impactSparks.transform.rotation = Quaternion.LookRotation(normal == Vector3.zero ? Vector3.up : normal);
             var emission = impactSparks.emission;
@@ -493,6 +504,7 @@ public class SpinEffect : MonoBehaviour
 
         if (shockwave != null)
         {
+            shockwave.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             shockwave.transform.position = worldPoint + Vector3.up * 0.04f;
             var main = shockwave.main;
             main.startSize = 0.55f * mag;
@@ -501,6 +513,7 @@ public class SpinEffect : MonoBehaviour
 
         if (flashBurst != null)
         {
+            flashBurst.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             flashBurst.transform.position = worldPoint + Vector3.up * 0.08f;
             var main = flashBurst.main;
             main.startSize = 0.75f * mag;

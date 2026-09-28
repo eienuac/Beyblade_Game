@@ -2,7 +2,7 @@ using UnityEngine;
 
 /// <summary>
 /// Oyuncu Beyblade'inin arkasından aksiyon kamerası.
-/// Sağ/sol tarafı zamanla ve çarpışmada değiştirir.
+/// Normalde biraz uzak; çarpışmada kısa süre yakınlaşır.
 /// </summary>
 public class TopDownCamera : MonoBehaviour
 {
@@ -11,20 +11,26 @@ public class TopDownCamera : MonoBehaviour
     public Transform enemyTarget;
 
     [Header("Kilitli Takip")]
-    public float backDistance = 5.8f;
-    public float height = 2.85f;
-    public float sideAmplitude = 2.15f;
-    public float followSpeed = 6.2f;
-    public float rotationSpeed = 9f;
-    public float lookAhead = 0.42f;
-    public float fieldOfView = 50f;
+    public float backDistance = 7.4f;
+    public float height = 3.6f;
+    public float sideAmplitude = 2.35f;
+    public float followSpeed = 5.4f;
+    public float rotationSpeed = 8f;
+    public float lookAhead = 0.38f;
+    public float fieldOfView = 48f;
+
+    [Header("Çarpışma Zoom")]
+    public float impactZoomDistance = 5.2f;
+    public float impactZoomHeight = 2.7f;
+    public float impactZoomDuration = 0.55f;
 
     [Header("Sarsılma Efekti")]
-    public float shakeIntensity = 0.18f;
-    public float shakeDuration = 0.16f;
+    public float shakeIntensity = 0.14f;
+    public float shakeDuration = 0.14f;
 
     private float currentShake = 0f;
     private float shakeTimer = 0f;
+    private float impactZoomTimer = 0f;
     private Vector3 smoothedForward = Vector3.forward;
     private Vector3 velocityRef;
     private Camera cam;
@@ -34,6 +40,7 @@ public class TopDownCamera : MonoBehaviour
     private float currentSide = 1f;
     private float sideTimer = 5f;
     private float heightBob;
+    private float zoomBlend;
 
     private void Start()
     {
@@ -74,8 +81,14 @@ public class TopDownCamera : MonoBehaviour
         sideTimer -= Time.deltaTime;
         if (sideTimer <= 0f) FlipSide();
 
+        if (impactZoomTimer > 0f)
+            impactZoomTimer -= Time.deltaTime;
+
+        float wantZoom = impactZoomTimer > 0f ? 1f : 0f;
+        zoomBlend = Mathf.Lerp(zoomBlend, wantZoom, 1f - Mathf.Exp(-6f * Time.deltaTime));
+
         currentSide = Mathf.Lerp(currentSide, targetSide, 1f - Mathf.Exp(-1.35f * Time.deltaTime));
-        heightBob = Mathf.Lerp(heightBob, Mathf.Sin(Time.time * 0.35f) * 0.18f, Time.deltaTime * 2f);
+        heightBob = Mathf.Lerp(heightBob, Mathf.Sin(Time.time * 0.35f) * 0.14f, Time.deltaTime * 2f);
 
         Vector3 playerPos = playerTarget.position;
         Vector3 enemyPos = enemyTarget != null ? enemyTarget.position : playerPos + Vector3.forward * 5f;
@@ -100,8 +113,13 @@ public class TopDownCamera : MonoBehaviour
         Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
 
         float fightDist = Vector3.Distance(playerPos, enemyPos);
-        float back = Mathf.Clamp(backDistance + fightDist * 0.22f, 4.6f, 8.8f);
-        float camHeight = Mathf.Clamp(height + fightDist * 0.1f, 2.3f, 4.4f) + heightBob;
+        float backFar = Mathf.Clamp(backDistance + fightDist * 0.18f, 6.2f, 10.5f);
+        float heightFar = Mathf.Clamp(height + fightDist * 0.08f, 3.1f, 5.2f);
+        float backNear = Mathf.Clamp(impactZoomDistance + fightDist * 0.08f, 4.4f, 6.8f);
+        float heightNear = Mathf.Clamp(impactZoomHeight + fightDist * 0.05f, 2.3f, 3.6f);
+
+        float back = Mathf.Lerp(backFar, backNear, zoomBlend);
+        float camHeight = Mathf.Lerp(heightFar, heightNear, zoomBlend) + heightBob;
 
         Vector3 desiredPos = playerPos
             - forward * back
@@ -109,18 +127,20 @@ public class TopDownCamera : MonoBehaviour
             + Vector3.up * camHeight;
 
         Vector3 lookPoint = Vector3.Lerp(playerPos, enemyPos, lookAhead) + Vector3.up * 0.32f;
-        Quaternion targetRot = Quaternion.LookRotation(lookPoint - desiredPos, Vector3.up);
 
         if (!snapped)
         {
             transform.position = desiredPos;
-            transform.rotation = targetRot;
+            transform.rotation = Quaternion.LookRotation(lookPoint - desiredPos, Vector3.up);
             snapped = true;
         }
         else
         {
             transform.position = Vector3.SmoothDamp(transform.position, desiredPos, ref velocityRef, 1f / followSpeed);
-            transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(lookPoint - transform.position, Vector3.up), 1f - Mathf.Exp(-rotationSpeed * Time.deltaTime));
+            transform.rotation = Quaternion.Slerp(
+                transform.rotation,
+                Quaternion.LookRotation(lookPoint - transform.position, Vector3.up),
+                1f - Mathf.Exp(-rotationSpeed * Time.deltaTime));
         }
 
         if (shakeTimer > 0f)
@@ -144,6 +164,7 @@ public class TopDownCamera : MonoBehaviour
         if (intensity < 0f) intensity = shakeIntensity;
         currentShake = intensity;
         shakeTimer = shakeDuration;
-        if (Random.value > 0.4f) FlipSide();
+        impactZoomTimer = impactZoomDuration;
+        if (Random.value > 0.55f) FlipSide();
     }
 }

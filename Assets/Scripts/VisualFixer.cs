@@ -1,17 +1,12 @@
 using UnityEngine;
 
 /// <summary>
-/// Bu script sahnedeki tüm görsel hataları, ışıklandırmayı ve dışarıdan eklenen
-/// 3D Arena (Stadium) modellerinin fizik collider'larını otomatize ederek %100 çözer.
+/// Sadece fizik/collider ve bozuk shader düzeltmesi.
+/// Orijinal beyblade ve arena materyallerine dokunmaz.
 /// </summary>
 public class VisualFixer : MonoBehaviour
 {
     private void Start()
-    {
-        FixEverything();
-    }
-
-    private void Update()
     {
         FixEverything();
         Destroy(this);
@@ -19,123 +14,87 @@ public class VisualFixer : MonoBehaviour
 
     private void FixEverything()
     {
-        // 1. KAMERA ARKAPLANINI DÜZELT
         Camera cam = Camera.main;
-        if (cam != null)
+        if (cam != null && cam.clearFlags == CameraClearFlags.Skybox)
         {
-            cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = new Color(0.1f, 0.15f, 0.22f); // Koyu lacivert
+            // Skybox yoksa koyu arka plan; skybox varsa bırak
+            if (RenderSettings.skybox == null)
+            {
+                cam.clearFlags = CameraClearFlags.SolidColor;
+                cam.backgroundColor = new Color(0.08f, 0.1f, 0.14f);
+            }
         }
 
-        // 2. DIŞARIDAN EKLENEN 3D ARENA MODELİNİ OTOMATİK DÜZELT VE FİZİK EKLE (DÜŞMEYİ ÖNLER)
         FixImportedStadiumModels();
+        ClearForcedBeybladeTints("PlayerBeyblade");
+        ClearForcedBeybladeTints("EnemyBeyblade");
 
-        // 3. KODLA ÜRETİLEN ARENA VARSA DÜZELT
-        ArenaGenerator arena = FindFirstObjectByType<ArenaGenerator>();
-        if (arena != null && arena.enabled)
-        {
-            if (arena.segments < 48)
-            {
-                arena.segments = 64;
-                arena.GenerateArena();
-            }
-
-            MeshRenderer ar = arena.GetComponent<MeshRenderer>();
-            if (ar != null)
-            {
-                MaterialPropertyBlock block = new MaterialPropertyBlock();
-                block.SetColor("_BaseColor", new Color(0.6f, 0.1f, 0.1f));
-                block.SetColor("_Color", new Color(0.6f, 0.1f, 0.1f));
-                block.SetFloat("_Smoothness", 0f);
-                ar.SetPropertyBlock(block);
-            }
-        }
-
-        // 4. OYUNCU VE DÜŞMAN RENKLERİNİ DÜZELT
-        FixBeybladeVisuals("PlayerBeyblade", new Color(0.1f, 0.4f, 1f));
-        FixBeybladeVisuals("EnemyBeyblade", new Color(0.25f, 0.25f, 0.25f));
-
-        // 5. IŞIK PATLAMASINI KIS VE NETLEŞTİR
         Light sun = FindFirstObjectByType<Light>();
         if (sun != null && sun.type == LightType.Directional)
         {
-            sun.intensity = 1.2f;
-            sun.shadows = LightShadows.Hard;
+            if (sun.intensity > 2.5f) sun.intensity = 1.35f;
+            sun.shadows = LightShadows.Soft;
         }
-        
-        Debug.Log("✅ Görsel ve Fiziksel Çevrim %100 Otomatik Düzeltildi!");
     }
 
     private void FixImportedStadiumModels()
     {
-        // Sahnedeki tüm GameObject'leri tara, ismi 'stadium' veya 'arena' olanları bul
         GameObject[] allObjects = FindObjectsByType<GameObject>(FindObjectsSortMode.None);
         foreach (GameObject obj in allObjects)
         {
             string lowerName = obj.name.ToLower();
-            if ((lowerName.Contains("stadium") || lowerName.Contains("arena")) && !obj.name.Contains("ArenaGenerator"))
+            if (!(lowerName.Contains("stadium") || lowerName.Contains("arena")) || obj.name.Contains("ArenaGenerator"))
+                continue;
+
+            MeshFilter[] meshFilters = obj.GetComponentsInChildren<MeshFilter>();
+            foreach (MeshFilter mf in meshFilters)
             {
-                // Tüm alt MeshFilter'ları bul
-                MeshFilter[] meshFilters = obj.GetComponentsInChildren<MeshFilter>();
-                foreach (MeshFilter mf in meshFilters)
+                if (mf == null || mf.sharedMesh == null) continue;
+
+                MeshCollider mc = mf.GetComponent<MeshCollider>();
+                if (mc == null)
+                    mc = mf.gameObject.AddComponent<MeshCollider>();
+                mc.sharedMesh = mf.sharedMesh;
+                mc.convex = false;
+
+                // Sadece kırık shader'ı düzelt — renk/materyale dokunma
+                MeshRenderer mr = mf.GetComponent<MeshRenderer>();
+                if (mr == null) continue;
+                Material[] mats = mr.sharedMaterials;
+                bool changed = false;
+                for (int i = 0; i < mats.Length; i++)
                 {
-                    if (mf != null && mf.sharedMesh != null)
+                    if (mats[i] == null || mats[i].shader == null) continue;
+                    string sn = mats[i].shader.name;
+                    if (sn.Contains("InternalErrorShader") || sn.Contains("Error") || sn.Contains("Hidden/InternalError"))
                     {
-                        // MeshCollider bileşeni var mı bak, yoksa ekle
-                        MeshCollider mc = mf.GetComponent<MeshCollider>();
-                        if (mc == null)
+                        Shader urp = Shader.Find("Universal Render Pipeline/Lit");
+                        if (urp == null) urp = Shader.Find("Standard");
+                        if (urp != null)
                         {
-                            mc = mf.gameObject.AddComponent<MeshCollider>();
-                        }
-
-                        // MESH COLLIDER'A MESH'İ OTOMATİK ATA (BOŞLUĞA DÜŞMEYİ %100 ENGELLER)
-                        mc.sharedMesh = mf.sharedMesh;
-                        mc.convex = false; // İçbükey çanak çemberi için convex kapalı olmalı
-                    }
-
-                    // Görsel Renk/Materyal Düzeltmesi (Gri/Pembe Kalmasını Engeller)
-                    MeshRenderer mr = mf.GetComponent<MeshRenderer>();
-                    if (mr != null)
-                    {
-                        for (int i = 0; i < mr.sharedMaterials.Length; i++)
-                        {
-                            if (mr.sharedMaterials[i] != null && mr.sharedMaterials[i].shader != null)
-                            {
-                                // URP veya Standard Shader ataması kontrolü
-                                if (mr.sharedMaterials[i].shader.name.Contains("InternalErrorShader") ||
-                                    mr.sharedMaterials[i].shader.name.Contains("Error"))
-                                {
-                                    Shader urpShader = Shader.Find("Universal Render Pipeline/Lit");
-                                    if (urpShader == null) urpShader = Shader.Find("Standard");
-                                    if (urpShader != null)
-                                    {
-                                        mr.sharedMaterials[i].shader = urpShader;
-                                    }
-                                }
-                            }
+                            mats[i].shader = urp;
+                            changed = true;
                         }
                     }
                 }
+                if (changed) mr.sharedMaterials = mats;
             }
         }
     }
 
-    private void FixBeybladeVisuals(string objName, Color col)
+    /// <summary>Eski VisualFixer'ın PropertyBlock ile ezdiği renkleri temizle.</summary>
+    private void ClearForcedBeybladeTints(string objName)
     {
         GameObject go = GameObject.Find(objName);
-        if (go != null)
+        if (go == null) return;
+
+        MeshRenderer[] renderers = go.GetComponentsInChildren<MeshRenderer>(true);
+        foreach (MeshRenderer r in renderers)
         {
-            MeshRenderer[] renderers = go.GetComponentsInChildren<MeshRenderer>();
-            foreach (MeshRenderer r in renderers)
-            {
-                if (r != null && !r.gameObject.name.Contains("StaminaBar") && !r.gameObject.name.Contains("Canvas"))
-                {
-                    MaterialPropertyBlock block = new MaterialPropertyBlock();
-                    block.SetColor("_BaseColor", col);
-                    block.SetColor("_Color", col);
-                    r.SetPropertyBlock(block);
-                }
-            }
+            if (r == null) continue;
+            if (r.gameObject.name.Contains("StaminaBar") || r.gameObject.name.Contains("Canvas")) continue;
+            if (r.gameObject.name.StartsWith("Trail") || r.gameObject.name.StartsWith("Motion")) continue;
+            r.SetPropertyBlock(null);
         }
     }
 }

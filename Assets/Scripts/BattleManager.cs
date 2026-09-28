@@ -12,6 +12,8 @@ public class BattleManager : MonoBehaviour
     private BeybladeController player;
     private BeybladeController enemy;
     private bool gameEnded;
+    private float playerOutTime;
+    private float enemyOutTime;
 
     private Canvas uiCanvas;
     private CanvasGroup group;
@@ -47,10 +49,44 @@ public class BattleManager : MonoBehaviour
 
         if (player.isLaunched && enemy.isLaunched)
         {
+            CheckRingOut(player, ref playerOutTime);
+            CheckRingOut(enemy, ref enemyOutTime);
+
             if (player.hasToppled && !enemy.hasToppled) EndGame(false);
             else if (enemy.hasToppled && !player.hasToppled) EndGame(true);
             else if (player.hasToppled && enemy.hasToppled) EndGame(true, true);
         }
+    }
+
+    private void CheckRingOut(BeybladeController bey, ref float outTime)
+    {
+        if (bey.hasToppled || !bey.isSpinning)
+        {
+            outTime = 0f;
+            return;
+        }
+
+        Vector3 p = bey.transform.position;
+        bool outside;
+        if (ArenaInfo.Known)
+        {
+            Vector3 flat = p - ArenaInfo.Center;
+            flat.y = 0f;
+            outside = flat.magnitude > ArenaInfo.Radius * 1.03f || p.y < ArenaInfo.MinY - 0.25f;
+        }
+        else
+        {
+            outside = p.y < -3f;
+        }
+
+        if (!outside)
+        {
+            outTime = 0f;
+            return;
+        }
+
+        outTime += Time.deltaTime;
+        if (outTime >= 0.35f) bey.ForceRingOut();
     }
 
     private void EndGame(bool playerWon, bool draw = false)
@@ -75,16 +111,18 @@ public class BattleManager : MonoBehaviour
         }
         else if (playerWon)
         {
-            kickerText.text = "MAÇ SONUCU";
+            bool ringOut = enemy != null && enemy.WasRingedOut;
+            kickerText.text = ringOut ? "RING OUT" : "MAÇ SONUCU";
             resultText.text = "ZAFER";
-            subText.text = "Rakibin spinini kestin.";
+            subText.text = ringOut ? "Rakibi arenadan attın." : "Rakibin spinini kestin.";
             accent = ModernUIKit.Cyan;
         }
         else
         {
-            kickerText.text = "MAÇ SONUCU";
+            bool ringOut = player != null && player.WasRingedOut;
+            kickerText.text = ringOut ? "RING OUT" : "MAÇ SONUCU";
             resultText.text = "YENİLDİN";
-            subText.text = "Beyblade'in durdu.";
+            subText.text = ringOut ? "Arenadan düştün." : "Beyblade'in durdu.";
             accent = ModernUIKit.Magenta;
         }
 

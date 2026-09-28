@@ -4,17 +4,17 @@ using System.Collections.Generic;
 [System.Serializable]
 public class PlayerSaveData
 {
-    public int gold = 0;
-    
-    // Sahip olunan parçaların ID'leri
+    public int gold = 50;
+    public int gems = 10;
+    public string playerName = "Blader";
+    public string rankTitle = "Newbie";
+
     public List<string> unlockedParts = new List<string>();
-    
-    // Şu an takılı olan parçaların ID'leri
+
     public string equippedLayerID = "";
     public string equippedDiskID = "";
     public string equippedTipID = "";
 
-    // Görev/Kariyer ilerlemesi
     public int currentPathingLevel = 1;
 }
 
@@ -45,7 +45,6 @@ public class PlayerDataManager : MonoBehaviour
         string json = JsonUtility.ToJson(data);
         PlayerPrefs.SetString(SAVE_KEY, json);
         PlayerPrefs.Save();
-        Debug.Log("Oyun Kaydedildi!");
     }
 
     public void LoadData()
@@ -54,21 +53,51 @@ public class PlayerDataManager : MonoBehaviour
         {
             string json = PlayerPrefs.GetString(SAVE_KEY);
             data = JsonUtility.FromJson<PlayerSaveData>(json);
+            if (data == null) data = CreateDefault();
+            if (string.IsNullOrEmpty(data.playerName)) data.playerName = "Blader";
+            if (string.IsNullOrEmpty(data.rankTitle)) data.rankTitle = "Newbie";
         }
         else
         {
-            data = new PlayerSaveData();
-            // Başlangıç parçaları (Default)
-            data.unlockedParts.Add("layer_basic");
-            data.unlockedParts.Add("disk_basic");
-            data.unlockedParts.Add("tip_basic");
-
-            data.equippedLayerID = "layer_basic";
-            data.equippedDiskID = "disk_basic";
-            data.equippedTipID = "tip_basic";
-            
+            data = CreateDefault();
             SaveData();
         }
+    }
+
+    PlayerSaveData CreateDefault()
+    {
+        var d = new PlayerSaveData();
+        d.unlockedParts.Add("layer_basic");
+        d.unlockedParts.Add("disk_basic");
+        d.unlockedParts.Add("tip_basic");
+        d.equippedLayerID = "layer_basic";
+        d.equippedDiskID = "disk_basic";
+        d.equippedTipID = "tip_basic";
+        return d;
+    }
+
+    public bool SpendGold(int amount)
+    {
+        if (amount <= 0) return true;
+        if (data.gold < amount) return false;
+        data.gold -= amount;
+        SaveData();
+        return true;
+    }
+
+    public bool SpendGems(int amount)
+    {
+        if (amount <= 0) return true;
+        if (data.gems < amount) return false;
+        data.gems -= amount;
+        SaveData();
+        return true;
+    }
+
+    public void AddGold(int amount)
+    {
+        data.gold += Mathf.Max(0, amount);
+        SaveData();
     }
 
     public void UnlockPart(string partID)

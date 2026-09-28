@@ -341,9 +341,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TopDownCamera
   playerTarget: {fileID: 0}
   enemyTarget: {fileID: 0}
-  cameraOffset: {x: 0, y: 8.5, z: -7.5}
+  backDistance: 7.4
+  height: 3.6
+  sideAmplitude: 2.15
   followSpeed: 10
   rotationSpeed: 12
+  lookAhead: 0.42
+  fieldOfView: 50
   shakeIntensity: 0.3
   shakeDuration: 0.2
 --- !u!114 &330585549
@@ -594,20 +598,20 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e866617e379d8ad4db294b69362048f4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BeybladeController
-  isPlayer: 0
+  isPlayer: 1
   partDatabase: {fileID: 11400000, guid: 60a716019cdec94429652e6917dc8463, type: 2}
-  equippedLayer: {fileID: 11400000, guid: 18fad949d8432f5499738e3ee72df159, type: 2}
-  equippedDisk: {fileID: 11400000, guid: 18fad949d8432f5499738e3ee72df159, type: 2}
-  equippedTip: {fileID: 11400000, guid: 18fad949d8432f5499738e3ee72df159, type: 2}
+  equippedLayer: {fileID: 0}
+  equippedDisk: {fileID: 0}
+  equippedTip: {fileID: 0}
   beybladeType: 0
-  maxStamina: 100
-  currentStamina: 100
-  staminaDecayRate: 2
+  maxStamina: 160
+  currentStamina: 160
+  staminaDecayRate: 1.15
   maxSpinRPM: 1500
   currentSpinRPM: 1500
-  attackPower: 5
-  defensePower: 0.5
-  weight: 2.5
+  attackPower: 7.5
+  defensePower: 0.28
+  weight: 2
   colliderRadiusMultiplier: 0.9
   isSpinning: 1
   hasToppled: 0
@@ -895,16 +899,16 @@ MonoBehaviour:
   equippedDisk: {fileID: 0}
   equippedTip: {fileID: 0}
   beybladeType: 1
-  maxStamina: 100
-  currentStamina: 100
-  staminaDecayRate: 2
+  maxStamina: 160
+  currentStamina: 160
+  staminaDecayRate: 0.95
   maxSpinRPM: 1500
   currentSpinRPM: 1500
-  attackPower: 5
-  defensePower: 0.5
-  weight: 2.5
+  attackPower: 3.2
+  defensePower: 0.72
+  weight: 4
   colliderRadiusMultiplier: 0.9
-  isSpinning: 0
+  isSpinning: 1
   hasToppled: 0
   isLaunched: 0
 --- !u!54 &970488130
@@ -915,7 +919,7 @@ Rigidbody:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 970488126}
   serializedVersion: 5
-  m_Mass: 2
+  m_Mass: 4
   m_LinearDamping: 0
   m_AngularDamping: 0.05
   m_CenterOfMass: {x: 0, y: 0, z: 0}

@@ -24,9 +24,9 @@ public class BeybladeController : MonoBehaviour
     [Tooltip("Eğer parça yoksa bu tipe göre çalışır.")]
     public BeybladeType beybladeType = BeybladeType.Denge;
 
-    public float maxStamina = 100f;
-    public float currentStamina = 100f;
-    public float staminaDecayRate = 2f;
+    public float maxStamina = 160f;
+    public float currentStamina = 160f;
+    public float staminaDecayRate = 1.1f;
 
     [Tooltip("Dakikadaki Dönüş Hızı (RPM)")]
     public float maxSpinRPM = 1500f;
@@ -40,17 +40,37 @@ public class BeybladeController : MonoBehaviour
     [Header("Çarpışma Hassasiyeti")]
     [Tooltip("Çarpışma kutusunu küçültmek/büyütmek için çarpan. (0.9 önerilir)")]
     [Range(0.5f, 1.5f)]
-    public float colliderRadiusMultiplier = 0.9f; 
+    public float colliderRadiusMultiplier = 0.9f;
 
     [Header("Durum")]
     public bool isSpinning = false;
     public bool hasToppled = false;
-    public bool isLaunched = false; 
+    public bool isLaunched = false;
 
     private Rigidbody rb;
     private CapsuleCollider capsuleCollider;
     private TopDownCamera topDownCamera;
     private float lastCollisionTime = 0f;
+    private float seekStunUntil = 0f;
+    private SkillSystem cachedSkill;
+    public bool IsSeekStunned => Time.time < seekStunUntil;
+
+    // BeyControl her karede yazar (dünya uzayında XZ, uzunluk 0–1)
+    [HideInInspector] public Vector3 steerInput;
+    private float overspeedUntil;
+    private float overspeedMult = 1f;
+    private float dashUntil;
+    public bool IsDashing => Time.time < dashUntil;
+    public bool WasRingedOut { get; private set; }
+    public bool MovementOverridden => cachedSkill != null && cachedSkill.OverridesMovement;
+
+    // Stat → davranış. Aralıklar ApplyStats clamp'leriyle uyumlu.
+    public float AttackNorm => Mathf.InverseLerp(2f, 10f, attackPower);
+    public float DefenseNorm => Mathf.InverseLerp(0.05f, 0.9f, defensePower);
+    public float WeightNorm => Mathf.InverseLerp(1.4f, 6f, weight);
+    public float MaxSpeed => Mathf.Lerp(4f, 15f, AttackNorm) * (1f - 0.15f * WeightNorm);
+    public float KnockbackResist => 0.45f * DefenseNorm;
+    public float StaminaDrainMultiplier => Mathf.Lerp(0.9f, 1.3f, AttackNorm);
 
     // Görsel rig: fizik gövdesi dik kalır, mesh ayrı döner (titreme/gimbal yok)
     public Transform VisualPivot { get; private set; }
@@ -168,53 +188,70 @@ public class BeybladeController : MonoBehaviour
 
     private void Start()
     {
+        if (gameObject.name.Contains("Player") || gameObject.name == "PlayerBeyblade")
+            isPlayer = true;
+
         if (rb == null) rb = GetComponent<Rigidbody>();
         if (capsuleCollider == null) capsuleCollider = GetComponent<CapsuleCollider>();
 
-        LoadParts(); // Parçaları yükle
-        ApplyStats(); // Statları hesapla
-        FlattenVisualToRealisticShape();
+        LoadParts();
+        ApplyStats();
 
-        // StaminaBarUI bileşeni yoksa otomatik ekle
         if (GetComponent<StaminaBarUI>() == null)
-        {
             gameObject.AddComponent<StaminaBarUI>();
-        }
 
-        // BattleManager yoksa sahneye otomatik ekle
         if (FindFirstObjectByType<BattleManager>() == null)
         {
             GameObject bm = new GameObject("BattleManager");
             bm.AddComponent<BattleManager>();
         }
 
-        // Fizik gövdesi hiç dönmez — titreme ve Euler gimbal kilitlenmesi buradan geliyordu
         rb.constraints = RigidbodyConstraints.FreezeRotation;
         rb.linearDamping = 0.35f;
         rb.angularDamping = 2f;
         rb.interpolation = RigidbodyInterpolation.Interpolate;
         rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
-        rb.angularVelocity = Vector3.zero;
         transform.rotation = Quaternion.identity;
 
-        // 3D MODEL DIŞ YARIÇAPINA BİREBİR KUSURSUZ TEMAS COLLIDER AYARI
         FitColliderToVisualMesh();
         SeatVisualOnCollider();
+        StripChildColliders();
 
-        // ANİME DÖNME EFEKTİ (Trail + Kıvılcım) otomatik ekle
         if (GetComponent<SpinEffect>() == null)
             gameObject.AddComponent<SpinEffect>();
 
-        // ERKEN ÇARPIŞMA ÖNLEYİCİ: Fırlatılana kadar fizikleri tamamen kapat!
+        if (GetComponent<SkillSystem>() == null)
+            gameObject.AddComponent<SkillSystem>();
+        cachedSkill = GetComponent<SkillSystem>();
+
+        if (GetComponent<BeyControl>() == null)
+            gameObject.AddComponent<BeyControl>();
+
         isLaunched = false;
         if (capsuleCollider != null) capsuleCollider.enabled = false;
-        if (rb != null) rb.isKinematic = true; 
+        if (rb != null)
+        {
+            bool wasKin = rb.isKinematic;
+            if (wasKin) rb.isKinematic = false;
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+            rb.isKinematic = true;
+        }
 
-        // Kamera referansını bul
         topDownCamera = FindFirstObjectByType<TopDownCamera>();
-
-        // Düşman hedefini bul
         FindEnemy();
+    }
+
+    /// <summary>Modelden gelen ekstra collider'lar çift çarpışma / iç içe hissi yaratır.</summary>
+    private void StripChildColliders()
+    {
+        Collider[] cols = GetComponentsInChildren<Collider>(true);
+        for (int i = 0; i < cols.Length; i++)
+        {
+            if (cols[i] == null) continue;
+            if (cols[i] == capsuleCollider) continue;
+            Destroy(cols[i]);
+        }
     }
 
     private void FindEnemy()
@@ -230,9 +267,6 @@ public class BeybladeController : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Parçaları Envanterden (veya Bot ise Inspectordan) yükler.
-    /// </summary>
     private void LoadParts()
     {
         if (isPlayer && PlayerDataManager.Instance != null && partDatabase != null)
@@ -247,88 +281,81 @@ public class BeybladeController : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Statları (Saldırı, Savunma, Ağırlık) parçalara göre toplar. Eğer parça yoksa eski sistemi kullanır.
-    /// </summary>
     private void ApplyStats()
     {
         if (equippedLayer != null && equippedDisk != null && equippedTip != null)
         {
-            // Temel değerler
             attackPower = 0;
             defensePower = 0;
             staminaDecayRate = 0;
             weight = 0;
 
-            // Layer Etkisi (Ağırlıklı Saldırı)
             attackPower += equippedLayer.attackBonus;
             defensePower += equippedLayer.defenseBonus;
             staminaDecayRate += equippedLayer.staminaBonus;
             weight += equippedLayer.weightBonus;
 
-            // Disk Etkisi (Ağırlıklı Savunma ve Kütle)
             attackPower += equippedDisk.attackBonus;
             defensePower += equippedDisk.defenseBonus;
             staminaDecayRate += equippedDisk.staminaBonus;
             weight += equippedDisk.weightBonus;
 
-            // Tip Etkisi (Ağırlıklı Stamina)
             attackPower += equippedTip.attackBonus;
             defensePower += equippedTip.defenseBonus;
             staminaDecayRate += equippedTip.staminaBonus;
             weight += equippedTip.weightBonus;
 
-            // Tür belirleme (Hangi stat daha yüksekse tipi ona çekebiliriz veya görsel olarak)
             if (attackPower > defensePower && attackPower > (5f - staminaDecayRate)) beybladeType = BeybladeType.Saldiri;
             else if (defensePower > attackPower && defensePower > (5f - staminaDecayRate)) beybladeType = BeybladeType.Savunma;
             else beybladeType = BeybladeType.Dayaniklilik;
-            
         }
         else
         {
-            ApplyTypeStats(); // Parça yoksa eski sisteme düş (Örn: Boş botlar)
+            ApplyTypeStats();
         }
 
-        // KÜTLE KORUMASI: Eğer oyuncu parçaların ağırlığını girmeyi unuttuysa ve ağırlık 0 ise,
-        // fizik motoru patlayıp Beyblade'i 31 milyon km uzağa ışınlamasın diye minimum 0.5 yapıyoruz.
         if (weight < 0.5f) weight = 0.5f;
+
+        // Inspector'da yanlışlıkla 50/75 gibi yüzde yazılmışsa düzelt
+        if (defensePower > 1.5f) defensePower = Mathf.Clamp01(defensePower / 100f);
+        defensePower = Mathf.Clamp(defensePower, 0.05f, 0.9f);
+        attackPower = Mathf.Clamp(attackPower, 2f, 20f);
+        weight = Mathf.Clamp(weight, 1.4f, 6f);
 
         if (rb != null) rb.mass = weight;
     }
 
-    /// <summary>
-    /// Taş-Kağıt-Makas Dengesi (Sadece parça takılı değilse çalışır)
-    /// </summary>
     private void ApplyTypeStats()
     {
+        // Daha uzun maçlar: düşük decay + dengeli hasar
         switch (beybladeType)
         {
-            case BeybladeType.Saldiri: // Attack
-                weight = 2.0f;           // Orta Hafif (Hareketli olması için)
-                attackPower = 14f;       // Çok yüksek hasar
-                defensePower = 0.2f;     // Çok düşük savunma
-                staminaDecayRate = 3.5f; // Çok hızlı yorulur
+            case BeybladeType.Saldiri:
+                weight = 2.0f;
+                attackPower = 7.5f;
+                defensePower = 0.28f;
+                staminaDecayRate = 1.15f;
                 break;
-                
-            case BeybladeType.Savunma: // Defense
-                weight = 4.0f;           // Çok Ağır (Yerinden oynamaz)
-                attackPower = 4f;        // Düşük hasar
-                defensePower = 0.8f;     // %80 hasar azaltma
-                staminaDecayRate = 2.8f; // Ağır olduğu için hızlı yorulur
+
+            case BeybladeType.Savunma:
+                weight = 4.8f;
+                attackPower = 3.2f;
+                defensePower = 0.78f;
+                staminaDecayRate = 0.85f;
                 break;
-                
-            case BeybladeType.Dayaniklilik: // Stamina
-                weight = 1.6f;           // Çok Hafif (Uzun dönebilmek için)
-                attackPower = 3f;        // Çok düşük hasar
-                defensePower = 0.1f;     // Çok düşük savunma
-                staminaDecayRate = 1.2f; // Çok yavaş yorulur
+
+            case BeybladeType.Dayaniklilik:
+                weight = 1.7f;
+                attackPower = 2.8f;
+                defensePower = 0.22f;
+                staminaDecayRate = 0.55f;
                 break;
-                
-            case BeybladeType.Denge: // Balance
+
+            case BeybladeType.Denge:
                 weight = 2.5f;
-                attackPower = 7f;
-                defensePower = 0.4f;
-                staminaDecayRate = 2.5f;
+                attackPower = 5.0f;
+                defensePower = 0.42f;
+                staminaDecayRate = 0.9f;
                 break;
         }
 
@@ -338,7 +365,7 @@ public class BeybladeController : MonoBehaviour
     private void FitColliderToVisualMesh()
     {
         Bounds combinedBounds = GetVisualWorldBounds();
-        float worldRadius = 0.45f;
+        float worldRadius = 0.55f;
         float worldHeight = 0.32f;
 
         if (combinedBounds.size.sqrMagnitude > 0.0001f)
@@ -347,28 +374,31 @@ public class BeybladeController : MonoBehaviour
             worldHeight = combinedBounds.size.y;
         }
 
+        worldRadius = Mathf.Clamp(worldRadius, 0.4f, 1.05f);
+        worldHeight = Mathf.Clamp(worldHeight, 0.22f, 0.55f);
+
         float rootScale = Mathf.Max(transform.lossyScale.x, transform.lossyScale.z);
         if (rootScale < 0.001f) rootScale = 1.0f;
-        
+
         float localRadius = (worldRadius / rootScale) * colliderRadiusMultiplier;
-        float localHeight = Mathf.Clamp(worldHeight / rootScale, 0.18f, 0.55f);
+        float localHeight = Mathf.Clamp(worldHeight / rootScale, 0.2f, 0.55f);
 
         if (capsuleCollider != null)
         {
-            capsuleCollider.radius = Mathf.Max(0.12f, localRadius);
+            capsuleCollider.radius = Mathf.Max(0.35f, localRadius);
             capsuleCollider.height = Mathf.Max(localHeight, capsuleCollider.radius * 1.15f);
-            capsuleCollider.direction = 1; // Y-axis
+            capsuleCollider.direction = 1;
             capsuleCollider.center = Vector3.zero;
-            capsuleCollider.contactOffset = 0.005f;
+            capsuleCollider.contactOffset = 0.01f;
         }
 
-        PhysicsMaterial noBounceMat = new PhysicsMaterial("BeybladeNoBounceMat");
-        noBounceMat.bounciness = 0.0f;
-        noBounceMat.dynamicFriction = 0.15f;
-        noBounceMat.staticFriction = 0.15f;
-        noBounceMat.bounceCombine = PhysicsMaterialCombine.Minimum;
-        noBounceMat.frictionCombine = PhysicsMaterialCombine.Minimum;
-        if (capsuleCollider != null) capsuleCollider.material = noBounceMat;
+        PhysicsMaterial mat = new PhysicsMaterial("BeybladeArcadeMat");
+        mat.bounciness = 0f;
+        mat.dynamicFriction = 0.02f;
+        mat.staticFriction = 0.02f;
+        mat.bounceCombine = PhysicsMaterialCombine.Minimum;
+        mat.frictionCombine = PhysicsMaterialCombine.Minimum;
+        if (capsuleCollider != null) capsuleCollider.material = mat;
     }
 
     private void SeatVisualOnCollider()
@@ -387,8 +417,7 @@ public class BeybladeController : MonoBehaviour
 
     private void Update()
     {
-        // FIRLATILMADIYSA FİZİK VE ÇARPIŞMAYI KAPAT, AMA GÖRSEL OLARAK DÖNMEYE İZİN VER
-        if (!isLaunched) 
+        if (!isLaunched)
         {
             if (capsuleCollider != null && capsuleCollider.enabled) capsuleCollider.enabled = false;
             if (rb != null && !rb.isKinematic) rb.isKinematic = true;
@@ -397,7 +426,7 @@ public class BeybladeController : MonoBehaviour
         }
         else
         {
-            if (capsuleCollider != null && !capsuleCollider.enabled && isSpinning) 
+            if (capsuleCollider != null && !capsuleCollider.enabled && isSpinning)
             {
                 capsuleCollider.enabled = true;
                 rb.isKinematic = false;
@@ -410,10 +439,9 @@ public class BeybladeController : MonoBehaviour
             return;
         }
 
-        // Fırlatıldıysa Stamina azalsın
         if (isLaunched && currentStamina > 0)
         {
-            currentStamina -= staminaDecayRate * Time.deltaTime;
+            currentStamina -= staminaDecayRate * StaminaDrainMultiplier * Time.deltaTime;
             currentSpinRPM = (currentStamina / maxStamina) * maxSpinRPM;
         }
         else if (isLaunched && currentStamina <= 0)
@@ -469,11 +497,12 @@ public class BeybladeController : MonoBehaviour
         float speed = velocity.magnitude;
 
         Quaternion lean = Quaternion.identity;
-        if (speed > 0.4f)
+        if (speed > 0.15f)
         {
             float staminaRatio = Mathf.Clamp01(currentStamina / maxStamina);
-            float maxTilt = Mathf.Lerp(10f, 4f, staminaRatio);
-            float tiltAngle = Mathf.Clamp(speed * 0.7f, 0f, maxTilt);
+            // Hareket yönüne belirgin eğilme (öne/arkaya)
+            float maxTilt = Mathf.Lerp(18f, 8f, staminaRatio);
+            float tiltAngle = Mathf.Clamp(speed * 1.15f, 3f, maxTilt);
             Vector3 tiltAxis = Vector3.Cross(Vector3.up, velocity.normalized);
             if (tiltAxis.sqrMagnitude > 0.0001f)
                 lean = Quaternion.AngleAxis(tiltAngle, tiltAxis.normalized);
@@ -489,70 +518,61 @@ public class BeybladeController : MonoBehaviour
         }
 
         targetTilt = lean;
-        VisualPivot.localRotation = Quaternion.Slerp(VisualPivot.localRotation, targetTilt, 1f - Mathf.Exp(-10f * dt));
+        VisualPivot.localRotation = Quaternion.Slerp(VisualPivot.localRotation, targetTilt, 1f - Mathf.Exp(-14f * dt));
     }
 
     private void FixedUpdate()
     {
         if (!isSpinning || rb == null || !isLaunched) return;
 
-        // Düşman hedefi yoksa bul
-        if (enemyTarget == null) FindEnemy();
+        if (enemyTarget == null || !enemyTarget.isLaunched)
+            FindEnemy();
 
-        // Zemin: şiddetli Y kesme + downforce mesh collider'da titreme yapıyordu
         Vector3 velY = rb.linearVelocity;
         if (velY.y > 0.25f) velY.y *= 0.4f;
         if (velY.y < -6f) velY.y = -6f;
         rb.linearVelocity = velY;
         rb.AddForce(Vector3.down * 10f, ForceMode.Acceleration);
 
-        // ====================================
-        //  BEYBLADE HAREKET FİZİĞİ
-        // ====================================
-        
-        // HEDEF BELİRLEME: Saldırı tipi düşmana, diğerleri merkeze
+        if (cachedSkill == null) cachedSkill = GetComponent<SkillSystem>();
+        if (cachedSkill != null && cachedSkill.OverridesMovement) return;
+
+        // Çarpışma sonrası kısa stun: çekim sekme kuvvetini yemesin
+        bool stunned = Time.time < seekStunUntil;
+
         Vector3 targetPoint;
-        
-        if (beybladeType == BeybladeType.Saldiri && enemyTarget != null && enemyTarget.isLaunched && enemyTarget.isSpinning)
-        {
-            // SALDIRI TİPİ: Düşmana doğru agresif yönelme!
+        // Attack: rakip fırlatıldıysa ona yönel (spin kontrolü gereksizce arıyordu)
+        if (beybladeType == BeybladeType.Saldiri && enemyTarget != null && enemyTarget.isLaunched)
             targetPoint = enemyTarget.transform.position;
-        }
         else
-        {
-            // DİĞER TİPLER: Arena merkezine yönel
             targetPoint = Vector3.zero;
-        }
 
-        Vector3 dirToTarget = (targetPoint - transform.position);
-        dirToTarget.y = 0;
+        Vector3 dirToTarget = targetPoint - transform.position;
+        dirToTarget.y = 0f;
         float distToTarget = dirToTarget.magnitude;
+        if (distToTarget < 0.001f) dirToTarget = transform.forward;
+        else dirToTarget.Normalize();
 
-        // HAREKET AGRESİFLİĞİ (Tipe göre)
         float basePull;
         float orbitForce;
-        
+
         if (beybladeType == BeybladeType.Saldiri)
         {
-            // Saldırı: Düşmana doğru güçlü çekim, yaklaştıkça hızlanır
-            basePull = 8.0f;
-            orbitForce = 0.15f; // Az yörünge, daha çok düz saldırı
-            
-            // Düşmana yaklaştıkça daha agresif
+            basePull = 9.0f;
+            orbitForce = 0.12f;
             if (distToTarget < 5f && enemyTarget != null)
-            {
-                basePull = 14.0f; // Yakınken çok agresif
-            }
+                basePull = 15.0f;
         }
         else if (beybladeType == BeybladeType.Dayaniklilik)
         {
-            basePull = 8.0f;   // Hızla merkeze oturur
+            basePull = 8.0f;
             orbitForce = 0.2f;
         }
         else if (beybladeType == BeybladeType.Savunma)
         {
-            basePull = 6.0f;   // Merkezde ağır durur
-            orbitForce = 0.15f;
+            // Ağır savunma: merkeze yapış, kaçma / kovalamaca yok
+            basePull = 11.0f;
+            orbitForce = 0.02f;
         }
         else
         {
@@ -560,90 +580,188 @@ public class BeybladeController : MonoBehaviour
             orbitForce = 0.3f;
         }
 
-        float rpmFactor = currentSpinRPM / maxSpinRPM;
-        float totalPull = basePull + rpmFactor * 4f;
-        rb.AddForce(dirToTarget.normalized * totalPull, ForceMode.Acceleration);
+        bool steering = steerInput.sqrMagnitude > 0.0025f;
 
-        // YÖRÜNGESEL DÖNÜŞ (Orbital Swirl) - Sadece merkeze yönelenlerde belirgin
-        if (distToTarget > 0.3f)
+        if (!stunned)
         {
-            Vector3 tangent = Vector3.Cross(dirToTarget.normalized, Vector3.up);
-            rb.AddForce(tangent * (totalPull * orbitForce), ForceMode.Acceleration);
+            float rpmFactor = Mathf.Clamp01(currentSpinRPM / Mathf.Max(1f, maxSpinRPM));
+            float totalPull = (basePull + rpmFactor * 4f) * Mathf.Lerp(0.8f, 1.25f, AttackNorm);
+
+            // Defense uzaklaştıysa merkeze daha sert çek
+            if (beybladeType == BeybladeType.Savunma && distToTarget > 1.2f)
+                totalPull *= 1.55f;
+
+            // Oyuncu yön verirken otomatik çekim geri planda kalır
+            if (steering)
+                totalPull *= 0.35f;
+
+            rb.AddForce(dirToTarget * totalPull, ForceMode.Acceleration);
+
+            if (distToTarget > 0.3f && beybladeType != BeybladeType.Savunma)
+            {
+                Vector3 tangent = Vector3.Cross(dirToTarget, Vector3.up);
+                rb.AddForce(tangent * (totalPull * orbitForce), ForceMode.Acceleration);
+            }
+            else if (beybladeType == BeybladeType.Savunma && distToTarget > 0.25f)
+            {
+                // Çok hafif yörünge — yerinde savunma hissi
+                Vector3 tangent = Vector3.Cross(dirToTarget, Vector3.up);
+                rb.AddForce(tangent * (totalPull * orbitForce), ForceMode.Acceleration);
+            }
+
+            float t = Time.time * 0.55f;
+            float drift = rpmFactor * (beybladeType == BeybladeType.Savunma ? 0.15f : 0.55f);
+            Vector3 sway = new Vector3(
+                (Mathf.PerlinNoise(t, noiseSeed) - 0.5f) * 2f,
+                0f,
+                (Mathf.PerlinNoise(noiseSeed, t) - 0.5f) * 2f
+            ) * drift;
+            rb.AddForce(sway, ForceMode.Acceleration);
         }
 
-        // Pürüzsüz Perlin sapması (Random.insideUnitCircle her fizik karesinde titretiyordu)
-        float t = Time.time * 0.55f;
-        float drift = rpmFactor * 0.55f;
-        Vector3 sway = new Vector3(
-            (Mathf.PerlinNoise(t, noiseSeed) - 0.5f) * 2f,
-            0f,
-            (Mathf.PerlinNoise(noiseSeed, t) - 0.5f) * 2f
-        ) * drift;
-        rb.AddForce(sway, ForceMode.Acceleration);
-
-        // HIZ LİMİTİ: Beyblade'in saçma hızlara ulaşmasını engelle
-        Vector3 flatVel = rb.linearVelocity;
-        flatVel.y = 0;
-        float maxSpeed = 15f;
-        if (flatVel.magnitude > maxSpeed)
+        if (steering)
         {
-            flatVel = flatVel.normalized * maxSpeed;
+            float steerAccel = Mathf.Lerp(10f, 16f, AttackNorm);
+            if (stunned) steerAccel *= 0.4f;
+            rb.AddForce(steerInput * steerAccel, ForceMode.Acceleration);
+        }
+
+        Vector3 flatVel = rb.linearVelocity;
+        flatVel.y = 0f;
+        float cap = MaxSpeed;
+        if (Time.time < overspeedUntil) cap *= overspeedMult;
+        float speed = flatVel.magnitude;
+        if (speed > cap)
+        {
+            // Savrulma anında yumuşak fren: darbe hızı tek karede silinmesin
+            float decel = stunned ? 14f : 45f;
+            float newSpeed = Mathf.MoveTowards(speed, cap, decel * Time.fixedDeltaTime);
+            flatVel = flatVel * (newSpeed / speed);
             rb.linearVelocity = new Vector3(flatVel.x, rb.linearVelocity.y, flatVel.z);
+        }
+
+        // Defense: ekstra sürtünme ile kaçışı kes
+        if (beybladeType == BeybladeType.Savunma && !steering && !IsDashing && !stunned)
+        {
+            Vector3 v = rb.linearVelocity;
+            float k = Mathf.Exp(-3.5f * Time.fixedDeltaTime);
+            v.x *= k;
+            v.z *= k;
+            rb.linearVelocity = v;
         }
     }
 
-    // Başka Beyblade ile Çarpışma
+    public void Dash(Vector3 dir, float strength)
+    {
+        if (rb == null || rb.isKinematic || !isLaunched || !isSpinning) return;
+        dir.y = 0f;
+        if (dir.sqrMagnitude < 0.001f) return;
+        dir.Normalize();
+
+        Vector3 v = rb.linearVelocity;
+        Vector3 flat = new Vector3(v.x, 0f, v.z);
+        float along = Vector3.Dot(flat, dir);
+        // Ters yöndeki hızı sil, yan hızı koru
+        flat += dir * (Mathf.Max(0f, -along) + strength);
+        rb.linearVelocity = new Vector3(flat.x, v.y, flat.z);
+
+        overspeedUntil = Time.time + 0.4f;
+        overspeedMult = Mathf.Max(1.7f, (strength + 3f) / Mathf.Max(1f, MaxSpeed));
+        dashUntil = Time.time + 0.45f;
+        seekStunUntil = Mathf.Max(seekStunUntil, Time.time + 0.4f);
+        wobbleIntensity = 3f;
+        wobbleTimer = 0.2f;
+    }
+
+    public void ForceRingOut()
+    {
+        if (!isLaunched || hasToppled) return;
+        WasRingedOut = true;
+        currentStamina = 0f;
+    }
+
+    // Başka Beyblade ile Çarpışma — kenar teması + net geri sekme
     private void OnCollisionEnter(Collision collision)
     {
         BeybladeController enemy = collision.gameObject.GetComponent<BeybladeController>();
 
-        if (enemy != null && isSpinning && isLaunched && enemy.isLaunched && Time.time - lastCollisionTime > 0.15f)
+        if (enemy != null && isSpinning && isLaunched && enemy.isLaunched && Time.time - lastCollisionTime > 0.12f)
         {
             lastCollisionTime = Time.time;
+            seekStunUntil = Time.time + (beybladeType == BeybladeType.Savunma ? 0.3f : 0.28f);
 
-            Vector3 hitDirection = (transform.position - collision.transform.position);
-            hitDirection.y = 0;
+            Vector3 hitDirection = transform.position - collision.transform.position;
+            hitDirection.y = 0f;
 
             if (hitDirection.sqrMagnitude < 0.01f)
-            {
-                hitDirection = new Vector3(Random.Range(-1f, 1f), 0, Random.Range(-1f, 1f));
-            }
+                hitDirection = new Vector3(Random.Range(-1f, 1f), 0f, Random.Range(-1f, 1f));
 
             Vector3 normalHit = hitDirection.normalized;
-            Vector3 sideScatter = Vector3.Cross(normalHit, Vector3.up) * Random.Range(-0.3f, 0.3f);
+            Vector3 sideScatter = Vector3.Cross(normalHit, Vector3.up) * Random.Range(-0.25f, 0.25f);
             Vector3 finalBounceDir = (normalHit + sideScatter).normalized;
             finalBounceDir.y = 0f;
 
-            // 1. DÜŞMANDAN ALINAN HASAR HESAPLAMASI
             float incomingDamage = enemy.attackPower / (1f + this.defensePower);
-            
-            // Dönüş hızına bağlı bonus güç
-            float rpmBonusDamage = (enemy.currentSpinRPM / 400f);
-            float totalDamage = incomingDamage + rpmBonusDamage;
+            float rpmBonusDamage = enemy.currentSpinRPM / 900f;
+            float totalDamage = (incomingDamage + rpmBonusDamage) * 0.55f;
 
-            // Stamina Düşüşü
+            if (cachedSkill == null) cachedSkill = GetComponent<SkillSystem>();
+            SkillSystem enemySkill = enemy.GetComponent<SkillSystem>();
+            if (cachedSkill != null && cachedSkill.IsShieldActive)
+                totalDamage *= cachedSkill.DamageTakenMultiplier;
+            if (enemySkill != null && enemySkill.IsRushing)
+                totalDamage *= enemySkill.RushDamageMultiplier;
+            if (enemy.IsDashing)
+                totalDamage *= 1.25f;
+
             currentStamina -= totalDamage;
 
-            // 2. FİZİKSEL GERİ SEKME (KNOCKBACK) - Çok azaltıldı!
-            float rawKnockback = totalDamage * (1.2f / this.weight);
-            float knockbackForce = Mathf.Clamp(rawKnockback, 0.5f, 8f);
-            
+            float safeWeight = Mathf.Max(this.weight, 1.5f);
+            float rawKnockback = totalDamage * (2.1f / safeWeight);
+            float knockbackForce = Mathf.Clamp(rawKnockback, 2.0f, 10f);
+
+            knockbackForce *= 1f - KnockbackResist;
+            if (enemy.IsDashing)
+                knockbackForce = Mathf.Min(12f, knockbackForce * 1.3f);
+
+            if (cachedSkill != null && cachedSkill.IsShieldActive)
+            {
+                knockbackForce *= 0.5f;
+                cachedSkill.OnShieldParry(enemy, -finalBounceDir);
+            }
+
+            if (enemySkill != null && enemySkill.IsRushing)
+                knockbackForce = Mathf.Min(12f, knockbackForce + enemySkill.RushPushForce * 0.35f);
+
+            // 1) Hızı yansıt (smooth arcade sekme)
+            Vector3 v = rb.linearVelocity;
+            v.y = 0f;
+            float awaySpeed = Mathf.Max(Vector3.Dot(v, -finalBounceDir), 0f);
+            v += finalBounceDir * ((awaySpeed * 1.15f + 1.5f) * (1f - KnockbackResist * 0.6f));
+
+            // Ağır beyler de çarpma hızına göre gözle görülür savrulsun
+            Vector3 rel = collision.relativeVelocity;
+            float relSpeed = new Vector3(rel.x, 0f, rel.z).magnitude;
+            float minAway = relSpeed * 0.5f * (1f - KnockbackResist);
+            float predictedAway = Vector3.Dot(v, finalBounceDir) + knockbackForce / Mathf.Max(rb.mass, 0.1f);
+            if (predictedAway < minAway)
+                v += finalBounceDir * (minAway - predictedAway);
+
+            rb.linearVelocity = new Vector3(v.x, rb.linearVelocity.y, v.z);
+
+            // 2) Ek impulse
             rb.AddForce(finalBounceDir * knockbackForce, ForceMode.Impulse);
 
-            // 3. ÇARPIŞMA SAVRULMASI (sadece görsel pivot)
-            wobbleIntensity = Mathf.Clamp(totalDamage * 0.35f, 1.2f, 6f);
-            wobbleTimer = 0.35f;
+            if (cachedSkill != null) cachedSkill.OnCollisionEnergy();
 
-            // 4. RECOIL (Saldırganın kendi aldığı tepme hasarı)
+            wobbleIntensity = Mathf.Clamp(totalDamage * 0.4f, 2f, 8f);
+            wobbleTimer = 0.4f;
+
             if (this.attackPower > this.defensePower && enemy.defensePower > enemy.attackPower)
-            {
-                currentStamina -= (knockbackForce * 0.3f);
-            }
+                currentStamina -= knockbackForce * 0.25f;
 
             if (topDownCamera != null)
-            {
-                topDownCamera.TriggerShake(Mathf.Clamp(totalDamage * 0.012f, 0.04f, 0.18f));
-            }
+                topDownCamera.TriggerShake(Mathf.Clamp(totalDamage * 0.014f, 0.05f, 0.2f));
 
             Vector3 impactPoint = collision.contactCount > 0 ? collision.GetContact(0).point : transform.position;
             Vector3 impactNormal = collision.contactCount > 0 ? collision.GetContact(0).normal : Vector3.up;
