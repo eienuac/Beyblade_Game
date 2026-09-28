@@ -248,7 +248,8 @@ public class BeyControl : MonoBehaviour
     {
         Camera cam = Camera.main;
         if (cam == null) return new Vector3(input.x, 0f, input.y);
-        Vector3 fwd = cam.transform.forward;
+        TopDownCamera tdc = cam.GetComponent<TopDownCamera>();
+        Vector3 fwd = tdc != null ? tdc.ControlForward : cam.transform.forward;
         fwd.y = 0f;
         if (fwd.sqrMagnitude < 0.01f)
         {

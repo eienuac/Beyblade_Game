@@ -30,7 +30,17 @@ public class SkillSystem : MonoBehaviour
     public Phase phase = Phase.ChargingEnergy;
     public float lastTimingQuality = 0f;
 
+    [Header("Saldırı Ultisi (Sürükleme)")]
+    public float ultDuration = 3f;
+    public float ultDragSpeed = 4.8f;
+    [Tooltip("Ulti bitişinde normal savrulmanın katı (2.5 = %150 fazla)")]
+    public float ultFinaleMultiplier = 2.5f;
+    public float ultBaseKnockSpeed = 3.6f;
+    public float ultDragDamagePerSec = 5f;
+
     public bool OverridesMovement { get; private set; }
+    /// <summary>Saldırı ultisi: sahibi savrulmaz, temas ettiği rakibi geriye sürükler.</summary>
+    public bool IsUltDragging { get; private set; }
     public bool IsShieldActive { get; private set; }
     public bool IsRushing { get; private set; }
     public float DamageTakenMultiplier { get; private set; } = 1f;
@@ -48,6 +58,10 @@ public class SkillSystem : MonoBehaviour
     float skillQuality;
     bool aiQueued;
     GameObject shieldVisual;
+    float lastUltContact = -10f;
+    Vector3 ultPushDir;
+    float ultSparkTimer;
+    TopDownCamera cineCam;
 
     void Awake()
     {
@@ -125,7 +139,9 @@ public class SkillSystem : MonoBehaviour
             return;
         if (rb.isKinematic) return;
 
-        if (bey.beybladeType == BeybladeType.Saldiri || bey.beybladeType == BeybladeType.Denge)
+        if (IsUltDragging)
+            TickUltDrag();
+        else if (bey.beybladeType == BeybladeType.Saldiri || bey.beybladeType == BeybladeType.Denge)
             TickAttackMovement();
     }
 
@@ -175,6 +191,7 @@ public class SkillSystem : MonoBehaviour
         OverridesMovement = false;
         IsShieldActive = false;
         IsRushing = false;
+        IsUltDragging = false;
         DamageTakenMultiplier = 1f;
         RushDamageMultiplier = 1f;
         RushPushForce = 0f;
@@ -182,7 +199,7 @@ public class SkillSystem : MonoBehaviour
         switch (bey.beybladeType)
         {
             case BeybladeType.Saldiri:
-                StartAttackSkill();
+                StartAttackUlt();
                 break;
             case BeybladeType.Savunma:
                 StartDefenseSkill();
@@ -198,6 +215,136 @@ public class SkillSystem : MonoBehaviour
         }
 
         if (ui != null) ui.ShowSkillFeedback(skillQuality, bey.beybladeType);
+        StartCinematic();
+    }
+
+    void StartCinematic()
+    {
+        if (cineCam == null) cineCam = FindFirstObjectByType<TopDownCamera>();
+        TopDownCamera cam = cineCam;
+        if (cam == null) return;
+        if (enemy == null || !enemy.isLaunched) FindEnemy();
+
+        Color accent;
+        string title;
+        switch (bey.beybladeType)
+        {
+            case BeybladeType.Saldiri: accent = ModernUIKit.Heat; title = "HÜCUM RUSH"; break;
+            case BeybladeType.Savunma: accent = ModernUIKit.Cyan; title = "KALKAN"; break;
+            case BeybladeType.Dayaniklilik: accent = ModernUIKit.Mint; title = "YENİLENME"; break;
+            default: accent = ModernUIKit.Gold; title = "BURST"; break;
+        }
+        if (!bey.isPlayer) title = "RAKİP  ·  " + title;
+
+        cam.BeginSkillCinematic(transform, enemy != null ? enemy.transform : null, accent, title, IsUltDragging);
+    }
+
+    void StartAttackUlt()
+    {
+        activeDuration = ultDuration;
+        OverridesMovement = true;
+        IsUltDragging = true;
+        lastUltContact = -10f;
+        ultSparkTimer = 0f;
+        bey.currentSpinRPM = Mathf.Min(bey.maxSpinRPM, bey.currentSpinRPM * Mathf.Lerp(1.08f, 1.22f, skillQuality));
+    }
+
+    static float ColliderRadius(Component c)
+    {
+        CapsuleCollider cc = c.GetComponent<CapsuleCollider>();
+        if (cc == null) return 0.45f;
+        Vector3 s = c.transform.lossyScale;
+        return cc.radius * Mathf.Max(Mathf.Abs(s.x), Mathf.Abs(s.z));
+    }
+
+    void TickUltDrag()
+    {
+        if (enemy == null || !enemy.isLaunched || !enemy.isSpinning)
+        {
+            FindEnemy();
+            if (enemy == null) return;
+        }
+        Rigidbody erb = enemy.GetComponent<Rigidbody>();
+        if (erb == null || erb.isKinematic) return;
+
+        Vector3 toEnemy = enemy.transform.position - transform.position;
+        toEnemy.y = 0f;
+        float dist = toEnemy.magnitude;
+        if (dist < 0.01f) return;
+        Vector3 dir = toEnemy / dist;
+
+        float touchDist = ColliderRadius(this) + ColliderRadius(enemy);
+        bool touching = dist <= touchDist + 0.15f;
+        Vector3 v = rb.linearVelocity;
+
+        if (!touching)
+        {
+            // Rakibe kilitlenip hücum et
+            Vector3 flat = new Vector3(v.x, 0f, v.z);
+            Vector3 desired = dir * Mathf.Lerp(9f, 12f, skillQuality);
+            flat = Vector3.MoveTowards(flat, desired, 40f * Time.fixedDeltaTime);
+            rb.linearVelocity = new Vector3(flat.x, v.y, flat.z);
+            return;
+        }
+
+        // Yeni temasta itme yönünü kilitle, sonra hafifçe takip et
+        if (Time.time - lastUltContact > 0.4f) ultPushDir = dir;
+        ultPushDir = Vector3.Slerp(ultPushDir, dir, 0.08f).normalized;
+        lastUltContact = Time.time;
+
+        float speed = ultDragSpeed * Mathf.Lerp(0.85f, 1.15f, skillQuality);
+
+        // Rakibi geriye sürükle: itme yönündeki hızı en az 'speed', yan kayma yarıya
+        Vector3 ev = erb.linearVelocity;
+        Vector3 eFlat = new Vector3(ev.x, 0f, ev.z);
+        float along = Vector3.Dot(eFlat, ultPushDir);
+        Vector3 lateral = eFlat - ultPushDir * along;
+        eFlat = ultPushDir * Mathf.Max(along, speed) + lateral * 0.5f;
+        erb.linearVelocity = new Vector3(eFlat.x, ev.y, eFlat.z);
+
+        // Temasta kal: aradaki boşluğu kapat, iç içe girmeyi önle
+        float gap = dist - touchDist;
+        Vector3 myFlat = ultPushDir * speed + dir * Mathf.Clamp(gap * 6f, -2f, 2f);
+        rb.linearVelocity = new Vector3(myFlat.x, v.y, myFlat.z);
+
+        enemy.currentStamina -= ultDragDamagePerSec * Time.fixedDeltaTime;
+
+        ultSparkTimer -= Time.fixedDeltaTime;
+        if (ultSparkTimer <= 0f)
+        {
+            ultSparkTimer = 0.12f;
+            Vector3 point = transform.position + dir * ColliderRadius(this);
+            SpinEffect fx = GetComponent<SpinEffect>();
+            if (fx != null) fx.PlayImpact(point, -dir, 5f);
+            if (cineCam != null) cineCam.TriggerShake(0.06f);
+        }
+    }
+
+    void UltFinale()
+    {
+        IsUltDragging = false;
+        bool contact = enemy != null && Time.time - lastUltContact <= 0.45f;
+
+        if (contact)
+        {
+            Vector3 dir = enemy.transform.position - transform.position;
+            dir.y = 0f;
+            if (dir.sqrMagnitude < 0.01f) dir = ultPushDir;
+            dir.Normalize();
+
+            // Rakip güçlendirilmiş savrulur, ulti sahibi normal geri seker
+            enemy.ApplyBurstKnockback(dir, ultBaseKnockSpeed * ultFinaleMultiplier * enemy.KnockbackTakenScale);
+            bey.ApplyBurstKnockback(-dir, ultBaseKnockSpeed * bey.KnockbackTakenScale);
+            enemy.currentStamina -= Mathf.Lerp(6f, 12f, skillQuality);
+
+            Vector3 point = transform.position + dir * ColliderRadius(this);
+            SpinEffect myFx = GetComponent<SpinEffect>();
+            if (myFx != null) myFx.PlayImpact(point, -dir, 22f);
+            SpinEffect enemyFx = enemy.GetComponent<SpinEffect>();
+            if (enemyFx != null) enemyFx.PlayImpact(point, dir, 22f);
+        }
+
+        if (cineCam != null) cineCam.CinematicFinale(transform, contact);
     }
 
     void StartAttackSkill()
@@ -237,11 +384,12 @@ public class SkillSystem : MonoBehaviour
     {
         if (phaseTimer >= activeDuration)
         {
+            if (IsUltDragging) UltFinale();
             EndSkill();
             return;
         }
 
-        if (bey.beybladeType == BeybladeType.Saldiri || bey.beybladeType == BeybladeType.Denge)
+        if (!IsUltDragging && (bey.beybladeType == BeybladeType.Saldiri || bey.beybladeType == BeybladeType.Denge))
         {
             float orbitEnd = 1.15f * (bey.beybladeType == BeybladeType.Denge ? 0.75f : 1f);
             IsRushing = phaseTimer >= orbitEnd;
@@ -335,6 +483,12 @@ public class SkillSystem : MonoBehaviour
 
     void EndSkill()
     {
+        if (IsUltDragging)
+        {
+            // Ulti yarıda kesildi (devrilme vb.): final yok, kamerayı bırak
+            IsUltDragging = false;
+            if (cineCam != null) cineCam.CinematicFinale(transform, false);
+        }
         phase = Phase.Cooldown;
         phaseTimer = 0f;
         OverridesMovement = false;
