@@ -6,7 +6,7 @@ using UnityEngine;
 public class AIBeyblade : MonoBehaviour
 {
     [Header("AI Ayarları")]
-    [Tooltip("AI'ın fırlatma gücü (0-1 arası)")]
+    [Tooltip("Kullanılmıyor: fırlatma gücü artık MatchContext.Difficulty'den gelir")]
     public float aiPower = 0.75f;
 
     [Tooltip("Fırlatma gecikmesi (saniye - SADECE OYUNCU FIRLATTIKTAN SONRA SAYAR)")]
@@ -66,7 +66,9 @@ public class AIBeyblade : MonoBehaviour
         launchDir.y = -0.2f;
         launchDir = launchDir.normalized;
 
-        float power = Random.Range(aiPower - 0.1f, aiPower + 0.1f);
+        // Güç bot seviyesine göre (kariyerde artar)
+        BeybladeCore.BotDifficulty diff = MatchContext.Difficulty;
+        float power = Random.Range(diff.LaunchPowerMin, diff.LaunchPowerMax);
         power = Mathf.Clamp(power, 0.4f, 1f); // Minimum 0.4f güç ile merkeze süzülsün
 
         if (rb != null) rb.AddForce(launchDir * launchForce * power, ForceMode.Impulse);

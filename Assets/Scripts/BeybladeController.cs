@@ -280,15 +280,20 @@ public class BeybladeController : MonoBehaviour
 
     private void LoadParts()
     {
-        if (isPlayer && PlayerDataManager.Instance != null && partDatabase != null)
-        {
-            string lID = PlayerDataManager.Instance.data.equippedLayerID;
-            string dID = PlayerDataManager.Instance.data.equippedDiskID;
-            string tID = PlayerDataManager.Instance.data.equippedTipID;
+        partDatabase = PartDatabase.Resolve(partDatabase);
 
-            equippedLayer = partDatabase.GetPartByID(lID);
-            equippedDisk = partDatabase.GetPartByID(dID);
-            equippedTip = partDatabase.GetPartByID(tID);
+        if (isPlayer && PlayerDataManager.Instance != null)
+        {
+            var d = PlayerDataManager.Instance.data;
+            equippedLayer = partDatabase.GetPartByID(d.equippedLayerID) ?? partDatabase.GetPartByID(DefaultPartCatalog.StarterLayer);
+            equippedDisk = partDatabase.GetPartByID(d.equippedDiskID) ?? partDatabase.GetPartByID(DefaultPartCatalog.StarterDisk);
+            equippedTip = partDatabase.GetPartByID(d.equippedTipID) ?? partDatabase.GetPartByID(DefaultPartCatalog.StarterTip);
+        }
+        else if (!isPlayer && MatchContext.IsCareer)
+        {
+            // Kariyer botu: tip seviyeye göre döner, parçasız (tip statlarıyla) savaşır
+            equippedLayer = equippedDisk = equippedTip = null;
+            beybladeType = (BeybladeType)(int)BeybladeCore.BotDifficulty.ArchetypeForLevel(MatchContext.CareerLevel);
         }
     }
 
@@ -296,36 +301,25 @@ public class BeybladeController : MonoBehaviour
     {
         if (equippedLayer != null && equippedDisk != null && equippedTip != null)
         {
-            attackPower = 0;
-            defensePower = 0;
-            staminaDecayRate = 0;
-            weight = 0;
-
-            attackPower += equippedLayer.attackBonus;
-            defensePower += equippedLayer.defenseBonus;
-            staminaDecayRate += equippedLayer.staminaBonus;
-            weight += equippedLayer.weightBonus;
-
-            attackPower += equippedDisk.attackBonus;
-            defensePower += equippedDisk.defenseBonus;
-            staminaDecayRate += equippedDisk.staminaBonus;
-            weight += equippedDisk.weightBonus;
-
-            attackPower += equippedTip.attackBonus;
-            defensePower += equippedTip.defenseBonus;
-            staminaDecayRate += equippedTip.staminaBonus;
-            weight += equippedTip.weightBonus;
-
-            if (attackPower > defensePower && attackPower > (5f - staminaDecayRate)) beybladeType = BeybladeType.Saldiri;
-            else if (defensePower > attackPower && defensePower > (5f - staminaDecayRate)) beybladeType = BeybladeType.Savunma;
-            else beybladeType = BeybladeType.Dayaniklilik;
+            BeybladeCore.BeyStatBlock s = BeybladeCore.BeyStatCalculator.Compute(
+                equippedLayer.ToStats(), equippedDisk.ToStats(), equippedTip.ToStats());
+            attackPower = s.Attack;
+            defensePower = s.Defense;
+            staminaDecayRate = s.StaminaDecay;
+            weight = s.Weight;
+            beybladeType = (BeybladeType)(int)s.Archetype;
         }
         else
         {
             ApplyTypeStats();
         }
 
-        if (weight < 0.5f) weight = 0.5f;
+        if (!isPlayer)
+        {
+            BeybladeCore.BotDifficulty diff = MatchContext.Difficulty;
+            attackPower *= diff.AttackScale;
+            staminaDecayRate *= diff.StaminaDecayScale;
+        }
 
         // Inspector'da yanlışlıkla 50/75 gibi yüzde yazılmışsa düzelt
         if (defensePower > 1.5f) defensePower = Mathf.Clamp01(defensePower / 100f);

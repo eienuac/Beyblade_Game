@@ -56,12 +56,29 @@ public class PlayerDataManager : MonoBehaviour
             if (data == null) data = CreateDefault();
             if (string.IsNullOrEmpty(data.playerName)) data.playerName = "Blader";
             if (string.IsNullOrEmpty(data.rankTitle)) data.rankTitle = "Newbie";
+            if (EnsureStarterParts(data)) SaveData();
         }
         else
         {
             data = CreateDefault();
             SaveData();
         }
+    }
+
+    /// <summary>Eski kayıtlarda başlangıç parçaları eksikse ekler. Değişiklik olduysa true döner.</summary>
+    static bool EnsureStarterParts(PlayerSaveData d)
+    {
+        bool changed = false;
+        if (d.unlockedParts == null) { d.unlockedParts = new List<string>(); changed = true; }
+        foreach (string id in new[] { DefaultPartCatalog.StarterLayer, DefaultPartCatalog.StarterDisk, DefaultPartCatalog.StarterTip })
+        {
+            if (!d.unlockedParts.Contains(id)) { d.unlockedParts.Add(id); changed = true; }
+        }
+        if (string.IsNullOrEmpty(d.equippedLayerID)) { d.equippedLayerID = DefaultPartCatalog.StarterLayer; changed = true; }
+        if (string.IsNullOrEmpty(d.equippedDiskID)) { d.equippedDiskID = DefaultPartCatalog.StarterDisk; changed = true; }
+        if (string.IsNullOrEmpty(d.equippedTipID)) { d.equippedTipID = DefaultPartCatalog.StarterTip; changed = true; }
+        if (d.currentPathingLevel < 1) { d.currentPathingLevel = 1; changed = true; }
+        return changed;
     }
 
     PlayerSaveData CreateDefault()

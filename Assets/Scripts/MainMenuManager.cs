@@ -42,13 +42,7 @@ public class MainMenuManager : MonoBehaviour
 
     void ResolvePartDatabase()
     {
-        if (partDatabase != null) return;
-        PartDatabase[] found = Resources.FindObjectsOfTypeAll<PartDatabase>();
-        if (found != null && found.Length > 0) partDatabase = found[0];
-#if UNITY_EDITOR
-        if (partDatabase == null)
-            partDatabase = UnityEditor.AssetDatabase.LoadAssetAtPath<PartDatabase>("Assets/GlobalPartDatabase.asset");
-#endif
+        partDatabase = PartDatabase.Resolve(partDatabase);
     }
 
     void RebuildUI()
@@ -275,6 +269,15 @@ public class MainMenuManager : MonoBehaviour
         customUI.staminaBar = MakeStat(statCard.transform, "STAMINA", ModernUIKit.Mint, 2);
         customUI.weightBar = MakeStat(statCard.transform, "WEIGHT", ModernUIKit.Gold, 3);
 
+        TextMeshProUGUI typeLbl = ModernUIKit.Label(statCard.transform, "TypeLabel", "TİP · DENGE", 24, ModernUIKit.Cyan, ModernUIKit.FontRole.Title, TextAlignmentOptions.Left);
+        typeLbl.fontStyle = FontStyles.Bold;
+        ModernUIKit.Anchor(typeLbl.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, 1f), new Vector2(28, -480), new Vector2(-56, 34));
+        customUI.typeLabel = typeLbl;
+
+        TextMeshProUGUI detailLbl = ModernUIKit.Label(statCard.transform, "DetailLabel", "", 16, ModernUIKit.Dim, ModernUIKit.FontRole.Caption, TextAlignmentOptions.Left);
+        ModernUIKit.Anchor(detailLbl.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, 1f), new Vector2(28, -516), new Vector2(-56, 28));
+        customUI.detailLabel = detailLbl;
+
         GameObject partCard = ModernUIKit.MakeGlassCard(customizationPanel.transform, "PartCard", new Vector2(560, 720)).gameObject;
         ModernUIKit.Anchor(partCard.GetComponent<RectTransform>(), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-80, -20), new Vector2(560, 720));
         customUI.layerListContainer = MakeSlot(partCard.transform, "LAYER", 0);
@@ -310,12 +313,12 @@ public class MainMenuManager : MonoBehaviour
         box.transform.SetParent(parent, false);
         RectTransform rt = box.AddComponent<RectTransform>();
         ModernUIKit.Anchor(rt, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), new Vector2(0, y - 40), new Vector2(-48, 150));
-        VerticalLayoutGroup vlg = box.AddComponent<VerticalLayoutGroup>();
-        vlg.spacing = 8f;
-        vlg.childForceExpandHeight = false;
-        vlg.childForceExpandWidth = true;
-        vlg.childControlWidth = true;
-        vlg.childControlHeight = false;
+        GridLayoutGroup grid = box.AddComponent<GridLayoutGroup>();
+        grid.cellSize = new Vector2(160, 60);
+        grid.spacing = new Vector2(10, 10);
+        grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        grid.constraintCount = 3;
+        grid.childAlignment = TextAnchor.UpperLeft;
         return box.transform;
     }
 
@@ -331,24 +334,40 @@ public class MainMenuManager : MonoBehaviour
     {
         pathingPanel = MakeSubPanel(root, "PathingPanel", "KARİYER", "Seviye atla, botları geç.");
         int level = PlayerDataManager.Instance != null ? PlayerDataManager.Instance.data.currentPathingLevel : 1;
+        // Mevcut seviyenin etrafındaki 5 seviyeyi göster
+        int first = Mathf.Max(1, level - 2);
         for (int i = 0; i < 5; i++)
         {
-            bool open = (i + 1) <= level;
+            int lv = first + i;
+            bool open = lv <= level;
             Color col = open ? ModernUIKit.Mint : ModernUIKit.Dim;
-            string status = open ? (i + 1 == level ? "ŞİMDİ" : "AÇIK") : "KİLİT";
+            string status = open ? (lv == level ? "ŞİMDİ" : "TAMAM") : "KİLİT";
             Image card = ModernUIKit.MakeGlassCard(pathingPanel.transform, "Path_" + i, new Vector2(210, 280));
             ModernUIKit.Anchor(card.rectTransform, new Vector2(0.5f, 0.48f), new Vector2(0.5f, 0.48f), new Vector2(0.5f, 0.5f), new Vector2(-480 + i * 240, -20), new Vector2(210, 280));
-            TextMeshProUGUI t = ModernUIKit.Label(card.transform, "T", "LV " + (i + 1), 32, Color.white, ModernUIKit.FontRole.Display);
+            TextMeshProUGUI t = ModernUIKit.Label(card.transform, "T", "LV " + lv, 32, Color.white, ModernUIKit.FontRole.Display);
             t.fontStyle = FontStyles.Bold;
-            ModernUIKit.Anchor(t.rectTransform, new Vector2(0.5f, 0.55f), new Vector2(0.5f, 0.55f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(180, 40));
+            ModernUIKit.Anchor(t.rectTransform, new Vector2(0.5f, 0.62f), new Vector2(0.5f, 0.62f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(180, 40));
+            TextMeshProUGUI rival = ModernUIKit.Label(card.transform, "Rival", ArchetypeLabel(BeybladeCore.BotDifficulty.ArchetypeForLevel(lv)), 16, ModernUIKit.Dim, ModernUIKit.FontRole.Caption);
+            ModernUIKit.Anchor(rival.rectTransform, new Vector2(0.5f, 0.45f), new Vector2(0.5f, 0.45f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(190, 26));
             TextMeshProUGUI s = ModernUIKit.Label(card.transform, "S", status, 18, col, ModernUIKit.FontRole.Title);
-            ModernUIKit.Anchor(s.rectTransform, new Vector2(0.5f, 0.28f), new Vector2(0.5f, 0.28f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(180, 30));
+            ModernUIKit.Anchor(s.rectTransform, new Vector2(0.5f, 0.25f), new Vector2(0.5f, 0.25f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(180, 30));
             if (open)
             {
                 Button btn = card.gameObject.AddComponent<Button>();
                 btn.targetGraphic = card;
-                btn.onClick.AddListener(StartPathingMatch);
+                btn.onClick.AddListener(() => StartPathingMatch(lv));
             }
+        }
+    }
+
+    static string ArchetypeLabel(BeybladeCore.BeyArchetype a)
+    {
+        switch (a)
+        {
+            case BeybladeCore.BeyArchetype.Attack: return "RAKİP · SALDIRI";
+            case BeybladeCore.BeyArchetype.Defense: return "RAKİP · SAVUNMA";
+            case BeybladeCore.BeyArchetype.Stamina: return "RAKİP · DAYANIKLILIK";
+            default: return "RAKİP · DENGE";
         }
     }
 
@@ -424,14 +443,20 @@ public class MainMenuManager : MonoBehaviour
 
     public void StartBattle()
     {
-        PlayerPrefs.SetInt("IsPathingMatch", 0);
+        MatchContext.SetupQuickMatch();
         SceneManager.LoadScene("SampleScene");
     }
 
     public void StartPathingMatch()
     {
+        int level = PlayerDataManager.Instance != null ? PlayerDataManager.Instance.data.currentPathingLevel : 1;
+        StartPathingMatch(level);
+    }
+
+    public void StartPathingMatch(int level)
+    {
         if (GetComponent<PathingManager>() == null) gameObject.AddComponent<PathingManager>();
-        GetComponent<PathingManager>().StartNextMatch();
+        GetComponent<PathingManager>().StartMatchAtLevel(level);
     }
 
     public void QuitGame()

@@ -12,13 +12,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a346bb78b5e88674eb9c7a7e98d9e0bf, type: 3}
   m_Name: Layer_Ejderha
   m_EditorClassIdentifier: Assembly-CSharp::BeybladePart
-  partID: 
-  partName: 
+  partID: layer_ejderha
+  partName: Ejderha
   type: 0
   partIcon: {fileID: 0}
   tier: 1
+  price: 150
   attackBonus: 5
-  defenseBonus: 0
+  defenseBonus: 0.05
   staminaBonus: 0
-  weightBonus: 0
+  weightBonus: 0.5
   partPrefab: {fileID: 0}

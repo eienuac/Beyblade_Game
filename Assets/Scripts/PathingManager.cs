@@ -8,36 +8,31 @@ public class PathingManager : MonoBehaviour
 
     public void StartNextMatch()
     {
-        if (PlayerDataManager.Instance != null)
-        {
-            int currentLevel = PlayerDataManager.Instance.data.currentPathingLevel;
-            Debug.Log("Kariyer Maçına Giriliyor! Seviye: " + currentLevel);
+        int level = PlayerDataManager.Instance != null ? PlayerDataManager.Instance.data.currentPathingLevel : 1;
+        StartMatchAtLevel(level);
+    }
 
-            // Burada bir GameManager'a veya PlayerPrefs'e "Gelecek maç kariyer modu maçıdır ve zorluğu budur" 
-            // bilgisini aktarabiliriz. Şimdilik sadece sahneyi yüklüyoruz.
-            PlayerPrefs.SetInt("IsPathingMatch", 1);
-            PlayerPrefs.SetInt("BotDifficultyLevel", currentLevel);
-            PlayerPrefs.Save();
-
-            SceneManager.LoadScene(battleSceneName);
-        }
+    public void StartMatchAtLevel(int level)
+    {
+        Debug.Log("Kariyer Maçına Giriliyor! Seviye: " + level);
+        MatchContext.SetupCareerMatch(level);
+        SceneManager.LoadScene(battleSceneName);
     }
 
     /// <summary>
-    /// Savaş bitip kazanıldığında çağrılır (BattleManager içinden çağırılacak)
+    /// Kariyer maçı kazanıldığında BattleManager çağırır. Sadece en yüksek açık seviye oynandıysa ilerletir.
+    /// Ödül (beycoin) BattleManager tarafında MatchRewards ile verilir.
     /// </summary>
     public static void OnMatchWon()
     {
-        if (PlayerPrefs.GetInt("IsPathingMatch", 0) == 1)
+        if (!MatchContext.IsCareer || PlayerDataManager.Instance == null) return;
+
+        var data = PlayerDataManager.Instance.data;
+        if (MatchContext.CareerLevel >= data.currentPathingLevel)
         {
-            if (PlayerDataManager.Instance != null)
-            {
-                PlayerDataManager.Instance.data.currentPathingLevel++;
-                PlayerDataManager.Instance.data.gold += 50; // Kazanma ödülü
-                PlayerDataManager.Instance.SaveData();
-                Debug.Log("Kariyer maçı kazanıldı! Yeni seviye: " + PlayerDataManager.Instance.data.currentPathingLevel);
-            }
-            PlayerPrefs.SetInt("IsPathingMatch", 0);
+            data.currentPathingLevel = MatchContext.CareerLevel + 1;
+            PlayerDataManager.Instance.SaveData();
+            Debug.Log("Kariyer maçı kazanıldı! Yeni seviye: " + data.currentPathingLevel);
         }
     }
 }

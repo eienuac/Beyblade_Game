@@ -2,7 +2,11 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System.Collections.Generic;
+using BeybladeCore;
 
+/// <summary>
+/// Beylocker: açılmış parçaları listeler, takılanı vurgular, statları savaşla aynı formülle gösterir.
+/// </summary>
 public class CustomizationUI : MonoBehaviour
 {
     public PartDatabase partDatabase;
@@ -19,6 +23,13 @@ public class CustomizationUI : MonoBehaviour
     public Image defenseBar;
     public Image staminaBar;
     public Image weightBar;
+    [Tooltip("Opsiyonel: hesaplanan tip (Saldırı/Savunma/...)")]
+    public TextMeshProUGUI typeLabel;
+    [Tooltip("Opsiyonel: seçili parçanın açıklaması")]
+    public TextMeshProUGUI detailLabel;
+
+    static readonly Color EquippedColor = new Color(0.12f, 0.82f, 1f, 0.55f);
+    static readonly Color IdleColor = new Color(0.14f, 0.22f, 0.36f, 0.28f);
 
     private void OnEnable()
     {
@@ -29,6 +40,7 @@ public class CustomizationUI : MonoBehaviour
     public void RefreshUI()
     {
         if (layerListContainer == null || diskListContainer == null || tipListContainer == null) return;
+        partDatabase = PartDatabase.Resolve(partDatabase);
         ClearLists();
         PopulateLists();
         UpdateStatBars();
@@ -43,70 +55,102 @@ public class CustomizationUI : MonoBehaviour
 
     private void PopulateLists()
     {
-        if (PlayerDataManager.Instance == null || partDatabase == null) return;
+        if (PlayerDataManager.Instance == null || partDatabase == null || partButtonPrefab == null) return;
 
-        List<string> unlocked = PlayerDataManager.Instance.data.unlockedParts;
+        var data = PlayerDataManager.Instance.data;
+        List<string> unlocked = data.unlockedParts;
 
-        foreach (string partID in unlocked)
+        // Veritabanı sırasıyla göster ki liste her açılışta aynı olsun
+        foreach (BeybladePart part in partDatabase.allParts)
         {
-            BeybladePart part = partDatabase.GetPartByID(partID);
-            if (part == null) continue;
+            if (part == null || !unlocked.Contains(part.partID)) continue;
 
             Transform targetContainer = null;
-            if (part.type == PartType.Layer) targetContainer = layerListContainer;
-            else if (part.type == PartType.WeightDisk) targetContainer = diskListContainer;
-            else if (part.type == PartType.PerformanceTip) targetContainer = tipListContainer;
+            string equippedId = null;
+            if (part.type == PartType.Layer) { targetContainer = layerListContainer; equippedId = data.equippedLayerID; }
+            else if (part.type == PartType.WeightDisk) { targetContainer = diskListContainer; equippedId = data.equippedDiskID; }
+            else if (part.type == PartType.PerformanceTip) { targetContainer = tipListContainer; equippedId = data.equippedTipID; }
+            if (targetContainer == null) continue;
 
-            if (targetContainer != null && partButtonPrefab != null)
+            bool equipped = part.partID == equippedId;
+            GameObject btnObj = Instantiate(partButtonPrefab, targetContainer);
+            btnObj.name = "Part_" + part.partID;
+            btnObj.SetActive(true);
+
+            string label = part.partName;
+            Text txt = btnObj.GetComponentInChildren<Text>();
+            if (txt != null) txt.text = label;
+            TMP_Text tmp = btnObj.GetComponentInChildren<TMP_Text>();
+            if (tmp != null)
             {
-                GameObject btnObj = Instantiate(partButtonPrefab, targetContainer);
-                
-                // Text ve İkon ayarlaması (UI'da Text veya Image componenti olduğunu varsayıyoruz)
-                Text txt = btnObj.GetComponentInChildren<Text>();
-                if (txt != null) txt.text = part.partName;
-                TMP_Text tmp = btnObj.GetComponentInChildren<TMP_Text>();
-                if (tmp != null) tmp.text = part.partName;
+                tmp.text = label;
+                tmp.color = equipped ? Color.white : ModernUIKit.Dim;
+                tmp.enableAutoSizing = true;
+                tmp.fontSizeMin = 12f;
+                tmp.fontSizeMax = 20f;
+            }
 
-                Button btn = btnObj.GetComponent<Button>();
-                if (btn != null)
-                {
-                    btn.onClick.AddListener(() => EquipPart(part));
-                }
+            Image bg = btnObj.GetComponent<Image>();
+            if (bg != null) bg.color = equipped ? EquippedColor : IdleColor;
+
+            Button btn = btnObj.GetComponent<Button>();
+            if (btn != null)
+            {
+                btn.onClick.RemoveAllListeners();
+                BeybladePart captured = part;
+                btn.onClick.AddListener(() => EquipPart(captured));
             }
         }
     }
 
     private void EquipPart(BeybladePart part)
     {
-        if (PlayerDataManager.Instance != null)
+        if (PlayerDataManager.Instance == null) return;
+        PlayerDataManager.Instance.EquipPart(part.type, part.partID);
+        if (detailLabel != null) detailLabel.text = part.partName + "   " + ShopUI.StatLine(part);
+        RefreshUI();
+    }
+
+    /// <summary>Takılı parçaların savaştaki statları (BeybladeController ile aynı formül).</summary>
+    public static BeyStatBlock ComputeEquippedStats(PartDatabase db)
+    {
+        db = PartDatabase.Resolve(db);
+        var d = PlayerDataManager.Instance != null ? PlayerDataManager.Instance.data : null;
+        BeybladePart l = d != null ? db.GetPartByID(d.equippedLayerID) : null;
+        BeybladePart k = d != null ? db.GetPartByID(d.equippedDiskID) : null;
+        BeybladePart t = d != null ? db.GetPartByID(d.equippedTipID) : null;
+        if (l == null) l = db.GetPartByID(DefaultPartCatalog.StarterLayer);
+        if (k == null) k = db.GetPartByID(DefaultPartCatalog.StarterDisk);
+        if (t == null) t = db.GetPartByID(DefaultPartCatalog.StarterTip);
+
+        var list = new List<PartStats>();
+        if (l != null) list.Add(l.ToStats());
+        if (k != null) list.Add(k.ToStats());
+        if (t != null) list.Add(t.ToStats());
+        return BeyStatCalculator.Compute(list.ToArray());
+    }
+
+    public static string ArchetypeName(BeyArchetype a)
+    {
+        switch (a)
         {
-            PlayerDataManager.Instance.EquipPart(part.type, part.partID);
-            UpdateStatBars();
+            case BeyArchetype.Attack: return "SALDIRI";
+            case BeyArchetype.Defense: return "SAVUNMA";
+            case BeyArchetype.Stamina: return "DAYANIKLILIK";
+            default: return "DENGE";
         }
     }
 
     private void UpdateStatBars()
     {
-        if (PlayerDataManager.Instance == null || partDatabase == null) return;
+        if (partDatabase == null) return;
+        BeyStatBlock s = ComputeEquippedStats(partDatabase);
 
-        string lID = PlayerDataManager.Instance.data.equippedLayerID;
-        string dID = PlayerDataManager.Instance.data.equippedDiskID;
-        string tID = PlayerDataManager.Instance.data.equippedTipID;
-
-        BeybladePart l = partDatabase.GetPartByID(lID);
-        BeybladePart d = partDatabase.GetPartByID(dID);
-        BeybladePart t = partDatabase.GetPartByID(tID);
-
-        float totalAtk = 0, totalDef = 0, totalStm = 0, totalWgt = 0;
-
-        if (l != null) { totalAtk += l.attackBonus; totalDef += l.defenseBonus; totalStm += l.staminaBonus; totalWgt += l.weightBonus; }
-        if (d != null) { totalAtk += d.attackBonus; totalDef += d.defenseBonus; totalStm += d.staminaBonus; totalWgt += d.weightBonus; }
-        if (t != null) { totalAtk += t.attackBonus; totalDef += t.defenseBonus; totalStm += t.staminaBonus; totalWgt += t.weightBonus; }
-
-        // Barları güncelle (Maksimum değerlere bölerek %0-1 arası doldurur)
-        if (attackBar != null) attackBar.fillAmount = totalAtk / 20f;
-        if (defenseBar != null) defenseBar.fillAmount = totalDef / 2f;
-        if (staminaBar != null) staminaBar.fillAmount = totalStm / 10f;
-        if (weightBar != null) weightBar.fillAmount = totalWgt / 6f;
+        // Bar 0'da tamamen boş görünmesin diye küçük bir taban
+        if (attackBar != null) attackBar.fillAmount = Mathf.Lerp(0.06f, 1f, s.AttackNorm);
+        if (defenseBar != null) defenseBar.fillAmount = Mathf.Lerp(0.06f, 1f, s.DefenseNorm);
+        if (staminaBar != null) staminaBar.fillAmount = Mathf.Lerp(0.06f, 1f, s.StaminaNorm);
+        if (weightBar != null) weightBar.fillAmount = Mathf.Lerp(0.06f, 1f, s.WeightNorm);
+        if (typeLabel != null) typeLabel.text = "TİP · " + ArchetypeName(s.Archetype);
     }
 }

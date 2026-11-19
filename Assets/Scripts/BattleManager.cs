@@ -20,6 +20,9 @@ public class BattleManager : MonoBehaviour
     private TextMeshProUGUI kickerText;
     private TextMeshProUGUI resultText;
     private TextMeshProUGUI subText;
+    private TextMeshProUGUI rewardText;
+    private int rewardGold;
+    private bool playerWonMatch;
     private Image accentBar;
     private RectTransform panelRt;
 
@@ -93,7 +96,15 @@ public class BattleManager : MonoBehaviour
     {
         if (gameEnded) return;
         gameEnded = true;
-        if (playerWon && !draw) PathingManager.OnMatchWon();
+
+        BeybladeCore.MatchOutcome outcome = draw ? BeybladeCore.MatchOutcome.Draw
+            : playerWon ? BeybladeCore.MatchOutcome.Win : BeybladeCore.MatchOutcome.Loss;
+        bool ringOut = outcome == BeybladeCore.MatchOutcome.Win && enemy != null && enemy.WasRingedOut;
+        rewardGold = BeybladeCore.MatchRewards.Calculate(outcome, MatchContext.IsCareer, MatchContext.CareerLevel, ringOut);
+        if (PlayerDataManager.Instance != null) PlayerDataManager.Instance.AddGold(rewardGold);
+
+        playerWonMatch = outcome == BeybladeCore.MatchOutcome.Win;
+        if (playerWonMatch) PathingManager.OnMatchWon();
         StartCoroutine(ShowResultRoutine(playerWon, draw));
     }
 
@@ -130,6 +141,10 @@ public class BattleManager : MonoBehaviour
         kickerText.color = accent;
         accentBar.color = accent;
         subText.color = ModernUIKit.Dim;
+        rewardText.text = "+" + rewardGold + " BEYCOIN";
+        if (MatchContext.IsCareer)
+            rewardText.text += "   ·   KARİYER LV " + MatchContext.CareerLevel;
+        rewardText.color = ModernUIKit.Gold;
 
         uiCanvas.gameObject.SetActive(true);
         group.alpha = 0f;
@@ -150,6 +165,10 @@ public class BattleManager : MonoBehaviour
 
     private void RestartGame()
     {
+        // Kariyerde kazandıysan sıradaki seviyeye geç, kaybettiysen aynı seviyeyi tekrar oyna
+        if (MatchContext.IsCareer && PlayerDataManager.Instance != null)
+            MatchContext.SetupCareerMatch(Mathf.Min(MatchContext.CareerLevel + (playerWonMatch ? 1 : 0),
+                PlayerDataManager.Instance.data.currentPathingLevel));
         SceneManager.LoadScene("SampleScene");
     }
 
@@ -197,6 +216,10 @@ public class BattleManager : MonoBehaviour
 
         subText = ModernUIKit.Label(panel.transform, "Sub", "", 24, ModernUIKit.Dim);
         ModernUIKit.Anchor(subText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0, -230), new Vector2(640, 50));
+
+        rewardText = ModernUIKit.Label(panel.transform, "Reward", "", 26, ModernUIKit.Gold);
+        rewardText.fontStyle = FontStyles.Bold;
+        ModernUIKit.Anchor(rewardText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0, -290), new Vector2(640, 44));
 
         Button rematch = ModernUIKit.MakeButton(panel.transform, "Rematch", "TEKRAR", ModernUIKit.Cyan, new Vector2(280, 72), RestartGame);
         ModernUIKit.Anchor(rematch.GetComponent<RectTransform>(), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(1f, 0f), new Vector2(-16, 48), new Vector2(280, 72));

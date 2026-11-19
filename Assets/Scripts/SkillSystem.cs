@@ -107,7 +107,8 @@ public class SkillSystem : MonoBehaviour
                     if (aiReactionDelay <= 0f)
                     {
                         aiQueued = false;
-                        float q = Random.Range(0.42f, 0.88f);
+                        BeybladeCore.BotDifficulty diff = MatchContext.Difficulty;
+                        float q = Random.Range(diff.SkillQualityMin, diff.SkillQualityMax);
                         BeginSkill(q);
                     }
                 }
@@ -503,7 +504,8 @@ public class SkillSystem : MonoBehaviour
     void QueueAiSkill()
     {
         aiQueued = true;
-        aiReactionDelay = Random.Range(0.25f, 0.7f);
+        BeybladeCore.BotDifficulty diff = MatchContext.Difficulty;
+        aiReactionDelay = Random.Range(diff.SkillReactionMin, diff.SkillReactionMax);
     }
 
     void FindEnemy()

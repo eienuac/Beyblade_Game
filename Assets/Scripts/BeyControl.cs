@@ -267,7 +267,8 @@ public class BeyControl : MonoBehaviour
     {
         aiThinkTimer -= Time.deltaTime;
         if (aiThinkTimer > 0f) return;
-        aiThinkTimer = Random.Range(0.12f, 0.22f);
+        BeybladeCore.BotDifficulty diff = MatchContext.Difficulty;
+        aiThinkTimer = Random.Range(diff.ThinkIntervalMin, diff.ThinkIntervalMax);
         aiSteer = Vector3.zero;
 
         if (enemy == null || !enemy.isLaunched) enemy = FindEnemy();
@@ -285,7 +286,7 @@ public class BeyControl : MonoBehaviour
             if (dist > ArenaInfo.Radius * 0.72f && outward)
             {
                 aiSteer = -fromCenter.normalized;
-                if (dist > ArenaInfo.Radius * 0.85f && vel.magnitude > bey.MaxSpeed * 0.8f && Focus >= dashCost + 10f)
+                if (diff.UsesEdgeRecovery && dist > ArenaInfo.Radius * 0.85f && vel.magnitude > bey.MaxSpeed * 0.8f && Focus >= dashCost + 10f)
                     TryDash(-fromCenter);
                 return;
             }
@@ -301,7 +302,7 @@ public class BeyControl : MonoBehaviour
         {
             case BeybladeType.Saldiri:
             case BeybladeType.Denge:
-                if (d < 4f && d > 1.2f && Focus >= dashCost + 5f && Random.value < 0.35f)
+                if (d < 4f && d > 1.2f && Focus >= dashCost + 5f && Random.value < diff.DashChance)
                     TryDash(toEnemy);
                 else if (d > 4f && Focus > 50f)
                     aiSteer = toEnemy.normalized * 0.7f;
