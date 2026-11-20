@@ -20,6 +20,15 @@ namespace BeybladeCore
         public float SkillDamageTakenA, SkillDamageTakenB;
     }
 
+    /// <summary>Bir dövüşçünün o anki görünür durumu (menü arka planı gibi görselleştirmeler için).</summary>
+    public struct FighterView
+    {
+        public Vec2 Pos, Vel;
+        public float Rpm;
+        public bool Alive, Out, Toppled, Dashing, SkillActive, Shielded;
+        public BeyArchetype Type;
+    }
+
     public struct SimSetup
     {
         public FighterProfile A, B;
@@ -117,6 +126,34 @@ namespace BeybladeCore
             toCenter = new Vec2(toCenter.X * c - toCenter.Z * sn, toCenter.X * sn + toCenter.Z * c);
             x.Vel = toCenter * (tune.LaunchImpulse * power / p.Mass);
             return x;
+        }
+
+        /// <summary>Geçen simülasyon süresi (sn).</summary>
+        public float Time => time;
+        /// <summary>Şu ana kadarki hasarlı çarpışma sayısı.</summary>
+        public int Collisions => collisions;
+        /// <summary>Son çarpışma noktası (iki beyin orta noktası).</summary>
+        public Vec2 LastImpactPoint { get; private set; }
+        public bool IsOver => !f[0].Alive || !f[1].Alive || time >= (setup.MaxTime > 0f ? setup.MaxTime : 240f);
+
+        public FighterView View(int i)
+        {
+            Fighter x = f[i];
+            return new FighterView
+            {
+                Pos = x.Pos, Vel = x.Vel, Rpm = x.Rpm,
+                Alive = x.Alive, Out = x.Out, Toppled = x.Toppled,
+                Dashing = x.Dashing(time),
+                SkillActive = x.Phase == SkillPhase.Active,
+                Shielded = x.Phase == SkillPhase.Active && x.Shield,
+                Type = x.P.Archetype
+            };
+        }
+
+        /// <summary>Tek sabit adım (Dt) ilerletir. Run() ile aynı mantık.</summary>
+        public void StepOnce()
+        {
+            if (!IsOver) Step();
         }
 
         public SimResult Run()
@@ -493,6 +530,7 @@ namespace BeybladeCore
             }
             lastCollision = time;
             collisions++;
+            LastImpactPoint = (a.Pos + b.Pos) * 0.5f;
 
             HitResult ha = Combat.ResolveHit(MakeHit(a, b, approachA, approachB), tune);
             HitResult hb = Combat.ResolveHit(MakeHit(b, a, approachB, approachA), tune);

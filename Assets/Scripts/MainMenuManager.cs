@@ -38,16 +38,11 @@ public class MainMenuManager : MonoBehaviour
     // Ana menü dinamik
     TextMeshProUGUI profileName, profileRank, profileInitial, coinHud;
     Image profileAvatar;
-    TextMeshProUGUI careerSub, quickSub, tasksBadgeLabel;
-    Image tasksBadge;
-    RectTransform quickCardGlowRt;
-    Image quickCardGlow;
-    // Vitrin
-    Image showcaseRing, showcaseCore, showcaseTypeChip;
-    RectTransform showcaseSpin;
-    TextMeshProUGUI showcaseType, showcaseParts, showcaseInitial;
-    Image[] showcaseFills = new Image[4];
-    TextMeshProUGUI[] showcaseValues = new TextMeshProUGUI[4];
+    TextMeshProUGUI careerSub, careerLevel, battleSub, lockerSub, lockerType, tasksBadgeLabel;
+    Image tasksBadge, battleGlow, lockerTypeChip;
+    RectTransform battleCard;
+    RawImage lockerIcon;
+    string lockerIconKey;
 
     // Alt ekranlar
     ShopUI shopUI;
@@ -67,6 +62,8 @@ public class MainMenuManager : MonoBehaviour
         EnsurePlayerData();
         partDatabase = PartDatabase.Resolve(partDatabase);
         Time.timeScale = 1f;
+        // Arkada canlı savaş
+        MenuArena.Ensure();
         RebuildUI();
 
         // Maçtan dönülüyorsa girişi atla
@@ -116,44 +113,27 @@ public class MainMenuManager : MonoBehaviour
 
     void BuildBackground()
     {
-        Image bg = ModernUIKit.MakeImage(root, "BG", ModernUIKit.BgDeep, null, false);
-        bg.sprite = null;
-        bg.raycastTarget = false;
-        ModernUIKit.Stretch(bg.rectTransform);
+        // Arka planda MenuArena (3B canlı savaş) var: burada sadece okunabilirlik için yumuşak karartmalar
+        bgRings = new RectTransform[0];
 
-        Image glowA = ModernUIKit.MakeImage(root, "GlowA", new Color(0.1f, 0.55f, 1f, 0.16f), ModernUIKit.GlowSprite, false);
-        glowA.raycastTarget = false;
-        ModernUIKit.Anchor(glowA.rectTransform, new Vector2(0.7f, 0.5f), new Vector2(0.7f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(1600f, 1600f));
+        Image tint = ModernUIKit.MakeImage(root, "Tint", new Color(0.01f, 0.02f, 0.05f, 0.18f), null, false);
+        tint.sprite = null;
+        tint.raycastTarget = false;
+        ModernUIKit.Stretch(tint.rectTransform);
 
-        Image glowB = ModernUIKit.MakeImage(root, "GlowB", new Color(1f, 0.3f, 0.45f, 0.07f), ModernUIKit.GlowSprite, false);
-        glowB.raycastTarget = false;
-        ModernUIKit.Anchor(glowB.rectTransform, new Vector2(0.1f, 0.1f), new Vector2(0.1f, 0.1f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(1200f, 1200f));
+        Image topShade = ModernUIKit.MakeImage(root, "TopShade", new Color(0.01f, 0.02f, 0.05f, 0.85f), ModernUIKit.VerticalGradientSprite, false);
+        topShade.raycastTarget = false;
+        ModernUIKit.Anchor(topShade.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(0f, 260f));
 
-        Image grid = ModernUIKit.MakeImage(root, "HexFloor", new Color(0.3f, 0.6f, 1f, 0.05f), ModernUIKit.HexGridSprite, false);
-        grid.raycastTarget = false;
-        ModernUIKit.Anchor(grid.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), Vector2.zero, new Vector2(2400f, 700f));
+        Image bottomShade = ModernUIKit.MakeImage(root, "BottomShade", new Color(0.01f, 0.02f, 0.05f, 0.92f), ModernUIKit.VerticalGradientSprite, false);
+        bottomShade.raycastTarget = false;
+        ModernUIKit.Anchor(bottomShade.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), Vector2.zero, new Vector2(0f, 460f));
+        bottomShade.rectTransform.localScale = new Vector3(1f, -1f, 1f);
 
-        // Stadyum halkaları (yavaşça döner)
-        float[] sizes = { 980f, 760f, 560f };
-        float[] alphas = { 0.07f, 0.1f, 0.14f };
-        bgRings = new RectTransform[sizes.Length];
-        for (int i = 0; i < sizes.Length; i++)
-        {
-            Image ring = ModernUIKit.MakeImage(root, "Ring" + i, new Color(0.3f, 0.85f, 1f, alphas[i]), i == 1 ? ModernUIKit.RingSprite : ModernUIKit.ThinRingSprite, false);
-            ring.raycastTarget = false;
-            ModernUIKit.Anchor(ring.rectTransform, new Vector2(0.7f, 0.48f), new Vector2(0.7f, 0.48f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(sizes[i], sizes[i]));
-            bgRings[i] = ring.rectTransform;
-        }
-
-        Image streak = ModernUIKit.MakeSkewPanel(root, "Streak", new Color(0.3f, 0.85f, 1f, 0.035f));
-        ModernUIKit.Anchor(streak.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-200f, 0f), new Vector2(520f, 1500f));
+        Image streak = ModernUIKit.MakeSkewPanel(root, "Streak", new Color(0.3f, 0.85f, 1f, 0.03f));
+        ModernUIKit.Anchor(streak.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-200f, 0f), new Vector2(420f, 1500f));
         streak.rectTransform.localEulerAngles = new Vector3(0f, 0f, -28f);
         bgStreak = streak.rectTransform;
-
-        Image vignette = ModernUIKit.MakeImage(root, "Vignette", new Color(0f, 0f, 0.02f, 0.6f), ModernUIKit.VerticalGradientSprite, false);
-        vignette.raycastTarget = false;
-        ModernUIKit.Anchor(vignette.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), Vector2.zero, new Vector2(0f, 360f));
-        vignette.rectTransform.localScale = new Vector3(1f, -1f, 1f);
     }
 
     // =====================================================================
@@ -248,8 +228,8 @@ public class MainMenuManager : MonoBehaviour
         Image bar = ModernUIKit.MakeSkewPanel(rt, "Bar", ModernUIKit.Heat);
         ModernUIKit.Anchor(bar.rectTransform, new Vector2(0.5f, 0.12f), new Vector2(0.5f, 0.12f), new Vector2(0.5f, 0.5f), new Vector2(60f * scale, 0f), new Vector2(360f * scale, 10f * scale));
 
-        TextMeshProUGUI tag = ModernUIKit.Label(rt, "Tagline", GameBrand.Tagline, 20f * scale, ModernUIKit.Dim, ModernUIKit.FontRole.Title);
-        tag.characterSpacing = 14f;
+        TextMeshProUGUI tag = ModernUIKit.Label(rt, "Tagline", GameBrand.Tagline, Mathf.Max(13f, 20f * scale), ModernUIKit.Dim, ModernUIKit.FontRole.Title);
+        tag.characterSpacing = scale < 0.6f ? 6f : 14f;
         ModernUIKit.Anchor(tag.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0.5f), new Vector2(0f, -12f * scale), new Vector2(900f * scale, 30f * scale));
         return rt;
     }
@@ -277,48 +257,54 @@ public class MainMenuManager : MonoBehaviour
 
         BuildTopBar(p);
 
-        // ---- Sol: modlar ----
-        TextMeshProUGUI modes = ModernUIKit.Label(p, "ModesCaption", "OYUN MODU", 16, ModernUIKit.Dim, ModernUIKit.FontRole.Title, TextAlignmentOptions.Left);
-        modes.fontStyle = FontStyles.Bold;
-        modes.characterSpacing = 10f;
-        ModernUIKit.Anchor(modes.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(120f, 250f), new Vector2(400f, 24f));
+        // Küçük logo (üst orta)
+        RectTransform logo = BuildLogo(p, 0.42f);
+        ModernUIKit.Anchor(logo, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -6f), logo.sizeDelta);
 
-        // Hızlı savaş
-        RectTransform quick = MakeModeCard(p, "QuickBattle", "HIZLI SAVAŞ", ModernUIKit.Battle, new Vector2(120f, 120f), new Vector2(660f, 200f), 60, StartBattle, out quickSub);
-        quickCardGlow = quick.Find("Glow").GetComponent<Image>();
-        quickCardGlowRt = quickCardGlow.rectTransform;
+        // ---- Alt: üç büyük kart (arena ortada görünür kalır) ----
+        const float y = 150f;
+        RectTransform career = MakeActionCard(p, "Career", "KARİYER", ModernUIKit.Gold, new Vector2(-560f, y), new Vector2(430f, 180f), 42, ShowPathing, out careerSub);
+        careerLevel = MakeCardBadge(career, ModernUIKit.Gold);
 
-        // Kariyer
-        MakeModeCard(p, "Career", "KARİYER", ModernUIKit.Gold, new Vector2(120f, -100f), new Vector2(660f, 150f), 44, ShowPathing, out careerSub);
+        battleCard = MakeActionCard(p, "Battle", "SAVAŞ", ModernUIKit.Battle, new Vector2(0f, y + 14f), new Vector2(560f, 220f), 78, StartBattle, out battleSub, true);
+        battleGlow = battleCard.Find("Glow").GetComponent<Image>();
+        MakeBattleIcon(battleCard);
 
-        // ---- Sağ: bey vitrini ----
-        BuildShowcase(p);
+        RectTransform locker = MakeActionCard(p, "Locker", "BEYLOCKER", ModernUIKit.Cyan, new Vector2(560f, y), new Vector2(430f, 180f), 38, ShowCustomization, out lockerSub);
+        // Senin beyin: canlı 3B ikon
+        lockerIcon = new GameObject("BeyIcon").AddComponent<RawImage>();
+        lockerIcon.transform.SetParent(locker, false);
+        lockerIcon.raycastTarget = false;
+        // Kartın üst kenarından taşan "pop-out" görsel
+        ModernUIKit.Anchor(lockerIcon.rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 0.5f), new Vector2(-6f, 6f), new Vector2(190f, 190f));
+        lockerTypeChip = ModernUIKit.MakeSkewPanel(locker, "TypeChip", ModernUIKit.Cyan);
+        ModernUIKit.Anchor(lockerTypeChip.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), new Vector2(36f, 0f), new Vector2(170f, 30f));
+        lockerType = ModernUIKit.Label(lockerTypeChip.transform, "T", "", 14, new Color(0.02f, 0.04f, 0.08f), ModernUIKit.FontRole.Display);
+        lockerType.fontStyle = FontStyles.Bold;
+        lockerType.characterSpacing = 3f;
+        ModernUIKit.Stretch(lockerType.rectTransform);
 
-        // ---- Alt gezinme ----
-        GameObject nav = new GameObject("BottomNav");
+        // ---- En alt: küçük bağlantılar ----
+        GameObject nav = new GameObject("BottomLinks");
         nav.transform.SetParent(p, false);
         RectTransform navRt = nav.AddComponent<RectTransform>();
-        ModernUIKit.Anchor(navRt, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 34f), new Vector2(1040f, 84f));
-        Image navBg = ModernUIKit.MakeImage(navRt, "Bg", Panel, ModernUIKit.SharpCardSprite);
-        navBg.raycastTarget = false;
+        ModernUIKit.Anchor(navRt, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 18f), new Vector2(780f, 62f));
+        Image navBg = ModernUIKit.MakeSkewPanel(navRt, "Bg", new Color(0.02f, 0.04f, 0.09f, 0.78f));
         ModernUIKit.Stretch(navBg.rectTransform);
-        Outline nol = navBg.gameObject.AddComponent<Outline>();
-        nol.effectColor = new Color(1f, 1f, 1f, 0.08f);
-        nol.effectDistance = new Vector2(1f, -1f);
 
-        string[] labels = { "BEYLOCKER", "MAĞAZA", "GÖREVLER", "PROFİL" };
-        string[] icons = { "B", "M", "G", "P" };
-        Color[] accents = { ModernUIKit.Cyan, ModernUIKit.Gold, ModernUIKit.Mint, ModernUIKit.Magenta };
-        UnityAction[] actions = { ShowCustomization, ShowShop, ShowTasks, ShowProfile };
+        string[] labels = { "GÖREVLER", "MAĞAZA", "PROFİL" };
+        string[] icons = { "G", "M", "P" };
+        Color[] accents = { ModernUIKit.Mint, ModernUIKit.Gold, ModernUIKit.Magenta };
+        UnityAction[] actions = { ShowTasks, ShowShop, ShowProfile };
         for (int i = 0; i < labels.Length; i++)
         {
             Button b = MakeNavButton(navRt, labels[i], icons[i], accents[i], i, labels.Length, actions[i]);
-            if (i == 2)
+            if (i == 0)
             {
                 tasksBadge = ModernUIKit.MakeImage(b.transform, "Badge", ModernUIKit.Danger, ModernUIKit.DiscSprite, false);
                 tasksBadge.raycastTarget = false;
-                ModernUIKit.Anchor(tasksBadge.rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f), new Vector2(-30f, -16f), new Vector2(26f, 26f));
-                tasksBadgeLabel = ModernUIKit.Label(tasksBadge.transform, "N", "", 14, Color.white, ModernUIKit.FontRole.Title);
+                ModernUIKit.Anchor(tasksBadge.rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f), new Vector2(-34f, -12f), new Vector2(24f, 24f));
+                tasksBadgeLabel = ModernUIKit.Label(tasksBadge.transform, "N", "", 13, Color.white, ModernUIKit.FontRole.Title);
                 tasksBadgeLabel.fontStyle = FontStyles.Bold;
                 ModernUIKit.Stretch(tasksBadgeLabel.rectTransform);
             }
@@ -360,42 +346,56 @@ public class MainMenuManager : MonoBehaviour
         coinHud = MakeCoinPill(p, "Coins", new Vector2(1f, 1f), new Vector2(-112f, -30f));
     }
 
-    RectTransform MakeModeCard(Transform parent, string name, string title, Color accent, Vector2 pos, Vector2 size, float titleSize,
-                               UnityAction onClick, out TextMeshProUGUI sub)
+    /// <summary>Alt sıradaki büyük eylem kartı (eğik panel, vurgu şeridi, parıltı, başlık + alt yazı).</summary>
+    RectTransform MakeActionCard(Transform parent, string name, string title, Color accent, Vector2 pos, Vector2 size, float titleSize,
+                                 UnityAction onClick, out TextMeshProUGUI sub, bool primary = false)
     {
         GameObject go = new GameObject(name);
         go.transform.SetParent(parent, false);
         RectTransform rt = go.AddComponent<RectTransform>();
-        ModernUIKit.Anchor(rt, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), pos, size);
+        ModernUIKit.Anchor(rt, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), pos, size);
 
-        Image glow = ModernUIKit.MakeImage(rt, "Glow", ModernUIKit.WithAlpha(accent, 0.12f), ModernUIKit.GlowSprite, false);
+        Image glow = ModernUIKit.MakeImage(rt, "Glow", ModernUIKit.WithAlpha(accent, primary ? 0.25f : 0.1f), ModernUIKit.GlowSprite, false);
         glow.raycastTarget = false;
-        ModernUIKit.Stretch(glow.rectTransform, -120, -120, -90, -90);
+        ModernUIKit.Stretch(glow.rectTransform, -140, -140, -110, -110);
 
-        Image bg = ModernUIKit.MakeSkewPanel(rt, "Bg", Panel);
+        Image bg = ModernUIKit.MakeSkewPanel(rt, "Bg", primary ? ModernUIKit.WithAlpha(accent, 0.92f) : new Color(0.03f, 0.06f, 0.12f, 0.9f));
         bg.raycastTarget = true;
         ModernUIKit.Stretch(bg.rectTransform);
         Outline ol = bg.gameObject.AddComponent<Outline>();
-        ol.effectColor = ModernUIKit.WithAlpha(accent, 0.5f);
-        ol.effectDistance = new Vector2(1.5f, -1.5f);
+        ol.effectColor = ModernUIKit.WithAlpha(primary ? Color.white : accent, primary ? 0.35f : 0.6f);
+        ol.effectDistance = new Vector2(2f, -2f);
 
-        Image stripe = ModernUIKit.MakeSkewPanel(rt, "Stripe", accent);
-        ModernUIKit.Anchor(stripe.rectTransform, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), new Vector2(6f, 0f), new Vector2(44f, -16f));
+        if (primary)
+        {
+            // Üst parlama şeridi
+            Image sheen = ModernUIKit.MakeImage(rt, "Sheen", new Color(1f, 1f, 1f, 0.16f), ModernUIKit.VerticalGradientSprite, false);
+            sheen.raycastTarget = false;
+            ModernUIKit.Anchor(sheen.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(-30f, size.y * 0.5f));
+        }
+        else
+        {
+            Image stripe = ModernUIKit.MakeSkewPanel(rt, "Stripe", accent);
+            ModernUIKit.Anchor(stripe.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 0f), new Vector2(-30f, 6f));
+        }
 
-        TextMeshProUGUI t = ModernUIKit.Label(rt, "Title", title, titleSize, Color.white, ModernUIKit.FontRole.Display, TextAlignmentOptions.Left);
+        Color titleCol = primary ? new Color(0.02f, 0.06f, 0.03f) : Color.white;
+        TextMeshProUGUI t = ModernUIKit.Label(rt, "Title", title, titleSize, titleCol, ModernUIKit.FontRole.Display, primary ? TextAlignmentOptions.Center : TextAlignmentOptions.Left);
         t.fontStyle = FontStyles.Bold | FontStyles.Italic;
-        t.characterSpacing = 6f;
-        ModernUIKit.Anchor(t.rectTransform, new Vector2(0f, 0.5f), new Vector2(1f, 0.5f), new Vector2(0f, 0f), new Vector2(76f, -6f), new Vector2(-160f, titleSize + 10f));
+        t.characterSpacing = primary ? 14f : 6f;
+        if (primary)
+            ModernUIKit.Anchor(t.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(56f, 14f), new Vector2(size.x - 170f, titleSize + 12f));
+        else
+            ModernUIKit.Anchor(t.rectTransform, new Vector2(0f, 0.5f), new Vector2(1f, 0.5f), new Vector2(0f, 0f), new Vector2(36f, -4f), new Vector2(-60f, titleSize + 10f));
 
-        sub = ModernUIKit.Label(rt, "Sub", "", 17, ModernUIKit.Dim, ModernUIKit.FontRole.Title, TextAlignmentOptions.Left);
-        sub.characterSpacing = 2f;
+        sub = ModernUIKit.Label(rt, "Sub", "", primary ? 17 : 15, primary ? new Color(0.02f, 0.08f, 0.04f, 0.85f) : ModernUIKit.Dim, ModernUIKit.FontRole.Title,
+            primary ? TextAlignmentOptions.Center : TextAlignmentOptions.Left);
+        sub.characterSpacing = 1.5f;
         sub.richText = true;
-        ModernUIKit.Anchor(sub.rectTransform, new Vector2(0f, 0.5f), new Vector2(1f, 0.5f), new Vector2(0f, 1f), new Vector2(78f, -10f), new Vector2(-160f, 50f));
-
-        Image arrow = ModernUIKit.MakeImage(rt, "Arrow", accent, ModernUIKit.ChevronSprite, false);
-        arrow.raycastTarget = false;
-        ModernUIKit.Anchor(arrow.rectTransform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-60f, 0f), new Vector2(36f, 28f));
-        arrow.rectTransform.localEulerAngles = new Vector3(0f, 0f, 90f);
+        if (primary)
+            ModernUIKit.Anchor(sub.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 1f), new Vector2(56f, -26f), new Vector2(size.x - 170f, 50f));
+        else
+            ModernUIKit.Anchor(sub.rectTransform, new Vector2(0f, 0.5f), new Vector2(1f, 0.5f), new Vector2(0f, 1f), new Vector2(38f, -10f), new Vector2(-60f, 50f));
 
         Button btn = bg.gameObject.AddComponent<Button>();
         btn.targetGraphic = bg;
@@ -404,89 +404,36 @@ public class MainMenuManager : MonoBehaviour
         return rt;
     }
 
-    void BuildShowcase(Transform p)
+    /// <summary>Kart köşesinde küçük rozet (ör. kariyer seviyesi).</summary>
+    TextMeshProUGUI MakeCardBadge(RectTransform card, Color accent)
     {
-        GameObject go = new GameObject("Showcase");
-        go.transform.SetParent(p, false);
-        RectTransform rt = go.AddComponent<RectTransform>();
-        ModernUIKit.Anchor(rt, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-110f, 30f), new Vector2(700f, 640f));
+        Image disc = ModernUIKit.MakeImage(card, "Badge", new Color(0.02f, 0.04f, 0.08f, 0.95f), ModernUIKit.DiscSprite, false);
+        disc.raycastTarget = false;
+        ModernUIKit.Anchor(disc.rectTransform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-24f, 4f), new Vector2(112f, 112f));
+        Image ring = ModernUIKit.MakeImage(disc.transform, "Ring", accent, ModernUIKit.ThickRingSprite, false);
+        ring.raycastTarget = false;
+        ModernUIKit.Stretch(ring.rectTransform);
+        TextMeshProUGUI cap = ModernUIKit.Label(disc.transform, "Cap", "SEVİYE", 12, ModernUIKit.Dim, ModernUIKit.FontRole.Title);
+        cap.characterSpacing = 3f;
+        ModernUIKit.Anchor(cap.rectTransform, new Vector2(0.5f, 0.72f), new Vector2(0.5f, 0.72f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(100f, 18f));
+        TextMeshProUGUI v = ModernUIKit.Label(disc.transform, "V", "1", 46, accent, ModernUIKit.FontRole.Display);
+        v.fontStyle = FontStyles.Bold;
+        ModernUIKit.Anchor(v.rectTransform, new Vector2(0.5f, 0.4f), new Vector2(0.5f, 0.4f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(110f, 54f));
+        return v;
+    }
 
-        Image card = ModernUIKit.MakeImage(rt, "Card", PanelSoft, ModernUIKit.SharpCardSprite);
-        ModernUIKit.Stretch(card.rectTransform);
-        Outline ol = card.gameObject.AddComponent<Outline>();
-        ol.effectColor = new Color(1f, 1f, 1f, 0.08f);
-        ol.effectDistance = new Vector2(1f, -1f);
-        Button btn = card.gameObject.AddComponent<Button>();
-        btn.targetGraphic = card;
-        btn.onClick.AddListener(ShowCustomization);
-        ModernUIKit.AddPressFeedback(btn);
-
-        TextMeshProUGUI cap = ModernUIKit.Label(rt, "Caption", "SENİN BEYİN", 16, ModernUIKit.Dim, ModernUIKit.FontRole.Title, TextAlignmentOptions.Left);
-        cap.fontStyle = FontStyles.Bold;
-        cap.characterSpacing = 10f;
-        ModernUIKit.Anchor(cap.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(36f, -30f), new Vector2(300f, 22f));
-
-        showcaseTypeChip = ModernUIKit.MakeSkewPanel(rt, "TypeChip", ModernUIKit.Cyan);
-        ModernUIKit.Anchor(showcaseTypeChip.rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-30f, -24f), new Vector2(230f, 40f));
-        showcaseType = ModernUIKit.Label(showcaseTypeChip.transform, "T", "", 18, new Color(0.02f, 0.04f, 0.08f), ModernUIKit.FontRole.Display);
-        showcaseType.fontStyle = FontStyles.Bold;
-        showcaseType.characterSpacing = 4f;
-        ModernUIKit.Stretch(showcaseType.rectTransform);
-
-        // Dönen bey simgesi
-        GameObject spin = new GameObject("Spin");
-        spin.transform.SetParent(rt, false);
-        showcaseSpin = spin.AddComponent<RectTransform>();
-        ModernUIKit.Anchor(showcaseSpin, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0.5f, 0.5f), new Vector2(170f, -210f), new Vector2(230f, 230f));
-        showcaseRing = ModernUIKit.MakeImage(showcaseSpin, "Ring", ModernUIKit.Cyan, ModernUIKit.ThickRingSprite, false);
-        showcaseRing.raycastTarget = false;
-        showcaseRing.type = Image.Type.Filled;
-        showcaseRing.fillMethod = Image.FillMethod.Radial360;
-        showcaseRing.fillAmount = 0.82f;
-        ModernUIKit.Stretch(showcaseRing.rectTransform);
-        for (int i = 0; i < 3; i++)
+    /// <summary>SAVAŞ kartındaki çapraz kanat simgesi (özgün, basit şekiller).</summary>
+    void MakeBattleIcon(RectTransform card)
+    {
+        for (int i = 0; i < 2; i++)
         {
-            Image blade = ModernUIKit.MakeSkewPanel(showcaseSpin, "Blade" + i, new Color(1f, 1f, 1f, 0.85f));
-            ModernUIKit.Anchor(blade.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0f), Vector2.zero, new Vector2(46f, 92f));
-            blade.rectTransform.localEulerAngles = new Vector3(0f, 0f, i * 120f);
+            Image blade = ModernUIKit.MakeSkewPanel(card, "Blade" + i, new Color(0.02f, 0.08f, 0.04f, 0.85f));
+            ModernUIKit.Anchor(blade.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(88f, 4f), new Vector2(20f, 96f));
+            blade.rectTransform.localEulerAngles = new Vector3(0f, 0f, i == 0 ? 40f : -40f);
         }
-        showcaseCore = ModernUIKit.MakeImage(showcaseSpin, "Core", ModernUIKit.Cyan, ModernUIKit.DiscSprite, false);
-        showcaseCore.raycastTarget = false;
-        ModernUIKit.Anchor(showcaseCore.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(84f, 84f));
-        showcaseInitial = ModernUIKit.Label(showcaseCore.transform, "I", "", 40, new Color(0.02f, 0.04f, 0.08f), ModernUIKit.FontRole.Display);
-        showcaseInitial.fontStyle = FontStyles.Bold;
-        ModernUIKit.Stretch(showcaseInitial.rectTransform);
-
-        showcaseParts = ModernUIKit.Label(rt, "Parts", "", 18, Color.white, ModernUIKit.FontRole.Title, TextAlignmentOptions.Left);
-        showcaseParts.richText = true;
-        showcaseParts.lineSpacing = 18f;
-        ModernUIKit.Anchor(showcaseParts.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, 1f), new Vector2(330f, -110f), new Vector2(-360f, 210f));
-
-        string[] names = { "SALDIRI", "SAVUNMA", "DAYANIKLILIK", "AĞIRLIK" };
-        Color[] cols = { ModernUIKit.Heat, ModernUIKit.Cyan, ModernUIKit.Mint, ModernUIKit.Gold };
-        for (int i = 0; i < 4; i++)
-        {
-            float y = -380f - i * 52f;
-            TextMeshProUGUI l = ModernUIKit.Label(rt, "StatName" + i, names[i], 15, ModernUIKit.Dim, ModernUIKit.FontRole.Title, TextAlignmentOptions.Left);
-            l.fontStyle = FontStyles.Bold;
-            l.characterSpacing = 4f;
-            ModernUIKit.Anchor(l.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(36f, y), new Vector2(200f, 22f));
-
-            Image track = ModernUIKit.MakeImage(rt, "StatTrack" + i, new Color(1f, 1f, 1f, 0.07f), null, false);
-            track.sprite = null;
-            track.raycastTarget = false;
-            ModernUIKit.Anchor(track.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, 1f), new Vector2(230f, y - 6f), new Vector2(-330f, 10f));
-            showcaseFills[i] = ModernUIKit.MakeHorizontalFill(track.transform, "Fill", cols[i]);
-            ModernUIKit.Stretch(showcaseFills[i].rectTransform);
-
-            showcaseValues[i] = ModernUIKit.Label(rt, "StatVal" + i, "", 17, Color.white, ModernUIKit.FontRole.Title, TextAlignmentOptions.Right);
-            showcaseValues[i].fontStyle = FontStyles.Bold;
-            ModernUIKit.Anchor(showcaseValues[i].rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-36f, y), new Vector2(80f, 22f));
-        }
-
-        TextMeshProUGUI hint = ModernUIKit.Label(rt, "Hint", "DÜZENLEMEK İÇİN DOKUN  >", 14, ModernUIKit.Dim, ModernUIKit.FontRole.Title, TextAlignmentOptions.Right);
-        hint.characterSpacing = 4f;
-        ModernUIKit.Anchor(hint.rectTransform, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-36f, 22f), new Vector2(400f, 20f));
+        Image hub = ModernUIKit.MakeImage(card, "Hub", new Color(0.02f, 0.08f, 0.04f, 0.9f), ModernUIKit.DiscSprite, false);
+        hub.raycastTarget = false;
+        ModernUIKit.Anchor(hub.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(88f, 4f), new Vector2(28f, 28f));
     }
 
     void RefreshMain()
@@ -505,35 +452,35 @@ public class MainMenuManager : MonoBehaviour
         Color tc = ModernUIKit.TypeColor(type);
         profileAvatar.color = tc;
 
-        quickSub.text = "Eşit güçte <color=#3FD8FF>SAVUNMA</color> rakibe karşı  ·  ödül 40+ beycoin";
+        battleSub.text = "Eşit güçte <b>SAVUNMA</b> rakibe karşı  ·  40+ beycoin";
         BeyArchetype rival = BotDifficulty.ArchetypeForLevel(d.currentPathingLevel);
-        careerSub.text = "Seviye " + d.currentPathingLevel + "  ·  sıradaki rakip: " + PlayerLoadout.ArchetypeName(rival);
+        careerSub.text = "Sıradaki rakip\n<b><color=#FFFFFF>" + PlayerLoadout.ArchetypeName(rival) + "</color></b>";
+        careerLevel.text = d.currentPathingLevel.ToString();
+
+        BeybladePart l = partDatabase.GetPartByID(d.equippedLayerID);
+        lockerSub.text = "Senin beyin\n<b><color=#FFFFFF>" + (l != null ? l.partName.ToUpper() : "-") + "</color></b>";
+        lockerType.text = ModernUIKit.TypeName(type);
+        lockerTypeChip.color = tc;
+
+        // Beyin canlı 3B ikonu (parça değişince yeni ikon)
+        string key = "bey_" + d.equippedLayerID + "_" + d.equippedDiskID + "_" + d.equippedTipID;
+        if (lockerIconKey != key)
+        {
+            lockerIconKey = key;
+            string li = d.equippedLayerID, di = d.equippedDiskID, ti = d.equippedTipID;
+            PartStudio studio = PartStudio.Get();
+            lockerIcon.texture = studio.Atlas;
+            lockerIcon.uvRect = studio.IconRect(key, parent =>
+            {
+                GameObject bey = ProceduralBeyFactory.BuildBey(BeyDesignCatalog.Assemble(li, di, ti), parent, 1f, out float contact);
+                bey.transform.localPosition = new Vector3(0f, -contact * 0.35f, 0f);
+                return bey;
+            });
+        }
 
         int claimable = GameTasks.ClaimableCount(d);
         tasksBadge.gameObject.SetActive(claimable > 0);
         tasksBadgeLabel.text = claimable.ToString();
-
-        // Vitrin
-        showcaseType.text = ModernUIKit.TypeName(type);
-        showcaseTypeChip.color = tc;
-        showcaseRing.color = tc;
-        showcaseCore.color = tc;
-        BeybladePart l = partDatabase.GetPartByID(d.equippedLayerID);
-        BeybladePart k = partDatabase.GetPartByID(d.equippedDiskID);
-        BeybladePart t = partDatabase.GetPartByID(d.equippedTipID);
-        string ln = l != null ? l.partName : "-", kn = k != null ? k.partName : "-", tn = t != null ? t.partName : "-";
-        showcaseInitial.text = ln.Length > 0 ? ln.Substring(0, 1).ToUpper() : "?";
-        showcaseParts.text =
-            "<size=70%><color=#93ADCC>LAYER</color></size>\n" + ln.ToUpper() + "\n" +
-            "<size=70%><color=#93ADCC>DISK</color></size>\n" + kn.ToUpper() + "\n" +
-            "<size=70%><color=#93ADCC>TIP</color></size>\n" + tn.ToUpper();
-
-        float[] norms = { stats.AttackNorm, stats.DefenseNorm, stats.StaminaNorm, stats.WeightNorm };
-        for (int i = 0; i < 4; i++)
-        {
-            showcaseFills[i].fillAmount = Mathf.Lerp(0.04f, 1f, norms[i]);
-            showcaseValues[i].text = Mathf.RoundToInt(norms[i] * 100f).ToString();
-        }
     }
 
     void RefreshCoins()
@@ -1066,10 +1013,10 @@ public class MainMenuManager : MonoBehaviour
 
         if (mainMenuPanel != null && mainMenuPanel.activeSelf)
         {
-            if (quickCardGlow != null)
-                quickCardGlow.color = ModernUIKit.WithAlpha(ModernUIKit.Battle, 0.1f + 0.08f * Mathf.Sin(t * 2.4f));
-            if (showcaseSpin != null)
-                showcaseSpin.localEulerAngles = new Vector3(0f, 0f, -t * 220f);
+            if (battleGlow != null)
+                battleGlow.color = ModernUIKit.WithAlpha(ModernUIKit.Battle, 0.22f + 0.14f * Mathf.Sin(t * 2.6f));
+            if (battleCard != null)
+                battleCard.localScale = Vector3.one * (1f + 0.018f * Mathf.Sin(t * 2.6f));
         }
 
         if (resetLabel != null && resetArmedUntil > 0f && t > resetArmedUntil)
@@ -1111,7 +1058,7 @@ public class MainMenuManager : MonoBehaviour
     {
         GameObject panel = NewLayer(name);
         Image dim = panel.AddComponent<Image>();
-        dim.color = new Color(0.01f, 0.015f, 0.035f, 0.9f);
+        dim.color = new Color(0.01f, 0.015f, 0.035f, 0.86f);
 
         Button back = MakeBackButton(panel.transform);
 

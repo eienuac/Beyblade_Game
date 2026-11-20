@@ -93,6 +93,24 @@ public class CustomizationUI : MonoBehaviour
             Image bg = btnObj.GetComponent<Image>();
             if (bg != null) bg.color = equipped ? EquippedColor : IdleColor;
 
+            // Sol tarafta parçanın canlı 3B ikonu
+            RawImage icon = new GameObject("Icon").AddComponent<RawImage>();
+            icon.transform.SetParent(btnObj.transform, false);
+            icon.raycastTarget = false;
+            RectTransform irt = icon.rectTransform;
+            irt.anchorMin = new Vector2(0f, 0.5f);
+            irt.anchorMax = new Vector2(0f, 0.5f);
+            irt.pivot = new Vector2(0f, 0.5f);
+            irt.anchoredPosition = new Vector2(4f, 0f);
+            irt.sizeDelta = new Vector2(56f, 56f);
+            ShopUI.SetPartIcon(icon, part);
+            if (tmp != null)
+            {
+                RectTransform trt = tmp.rectTransform;
+                trt.offsetMin = new Vector2(58f, trt.offsetMin.y);
+                tmp.alignment = TextAlignmentOptions.Left;
+            }
+
             Button btn = btnObj.GetComponent<Button>();
             if (btn != null)
             {

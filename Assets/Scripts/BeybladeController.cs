@@ -100,6 +100,12 @@ public class BeybladeController : MonoBehaviour
     private MovementProfile movementProfile;
     private FighterProfile? profileOverride;
 
+    [Header("Görünüm")]
+    [Tooltip("Açık: takılı parçalara göre koddan üretilen özgün model. Kapalı: sahnedeki model.")]
+    public bool useProceduralVisual = true;
+    [Tooltip("Prosedürel modelin dünya yarıçapı (m)")]
+    public float proceduralRadius = 0.5f;
+
     [Header("Arena")]
     [Tooltip("Stadyum eğimine ek merkeze çekim (m/s², kenarda). Stadyum modeli yeterince çukur değilse artır.")]
     public float arenaCentering = 1.6f;
@@ -236,6 +242,7 @@ public class BeybladeController : MonoBehaviour
         rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
         transform.rotation = Quaternion.identity;
 
+        ApplyProceduralVisual();
         FitColliderToVisualMesh();
         SeatVisualOnCollider();
         StripChildColliders();
@@ -263,6 +270,29 @@ public class BeybladeController : MonoBehaviour
 
         topDownCamera = FindFirstObjectByType<TopDownCamera>();
         FindEnemy();
+    }
+
+    /// <summary>Sahnedeki modeli gizler, parçalara göre üretilen özgün modeli VisualSpin altına koyar.</summary>
+    private void ApplyProceduralVisual()
+    {
+        if (!useProceduralVisual || VisualSpin == null) return;
+        foreach (Renderer r in VisualSpin.GetComponentsInChildren<Renderer>(true)) r.enabled = false;
+
+        BeyVisual look = ResolveVisual();
+        float spinScale = Mathf.Max(0.0001f, Mathf.Abs(VisualSpin.lossyScale.x));
+        GameObject model = ProceduralBeyFactory.BuildBey(look, VisualSpin, proceduralRadius / spinScale, out _);
+        model.transform.localPosition = Vector3.zero;
+        model.transform.localRotation = Quaternion.identity;
+    }
+
+    /// <summary>Görünüm: oyuncu → takılı parçalar; bot → tipine uygun set.</summary>
+    private BeyVisual ResolveVisual()
+    {
+        if (MatchContext.TryGetForcedArchetype(isPlayer, out BeyArchetype forced))
+            return BeyDesignCatalog.ForArchetype(forced);
+        if (equippedLayer != null && equippedDisk != null && equippedTip != null)
+            return BeyDesignCatalog.Assemble(equippedLayer.partID, equippedDisk.partID, equippedTip.partID);
+        return BeyDesignCatalog.ForArchetype((BeyArchetype)(int)beybladeType);
     }
 
     /// <summary>Modelden gelen ekstra collider'lar çift çarpışma / iç içe hissi yaratır.</summary>

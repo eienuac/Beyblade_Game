@@ -112,19 +112,15 @@ public class ShopUI : MonoBehaviour
         border.effectColor = new Color(accent.r, accent.g, accent.b, 0.45f);
         border.effectDistance = new Vector2(1f, -1f);
 
-        Image preview = ModernUIKit.MakeImage(card.transform, "Preview", new Color(accent.r, accent.g, accent.b, 0.3f), ModernUIKit.CircleSprite, false);
-        ModernUIKit.Anchor(preview.rectTransform, new Vector2(0.5f, 0.68f), new Vector2(0.5f, 0.68f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(100, 100));
-        preview.raycastTarget = false;
-        if (part.partIcon != null)
-        {
-            preview.sprite = part.partIcon;
-            preview.color = Color.white;
-        }
-        else
-        {
-            TextMeshProUGUI glyph = ModernUIKit.Label(preview.transform, "G", part.partName.Substring(0, 1), 40, Color.white, ModernUIKit.FontRole.Display);
-            ModernUIKit.Stretch(glyph.rectTransform);
-        }
+        // Parçanın canlı 3B ikonu (koddan üretilen özgün model)
+        Image halo = ModernUIKit.MakeImage(card.transform, "Halo", new Color(accent.r, accent.g, accent.b, 0.22f), ModernUIKit.GlowSprite, false);
+        halo.raycastTarget = false;
+        ModernUIKit.Anchor(halo.rectTransform, new Vector2(0.5f, 0.68f), new Vector2(0.5f, 0.68f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(220, 160));
+        RawImage icon = new GameObject("Icon").AddComponent<RawImage>();
+        icon.transform.SetParent(card.transform, false);
+        icon.raycastTarget = false;
+        ModernUIKit.Anchor(icon.rectTransform, new Vector2(0.5f, 0.68f), new Vector2(0.5f, 0.68f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(170, 170));
+        SetPartIcon(icon, part);
 
         TextMeshProUGUI title = ModernUIKit.Label(card.transform, "Title", part.partName.ToUpper(), 19, Color.white, ModernUIKit.FontRole.Title);
         title.fontStyle = FontStyles.Bold;
@@ -149,6 +145,25 @@ public class ShopUI : MonoBehaviour
             buy.targetGraphic = priceBar;
             buy.onClick.AddListener(() => TryBuy(part));
         }
+    }
+
+    /// <summary>RawImage'a parçanın canlı 3B ikonunu bağlar (PartStudio atlası).</summary>
+    public static void SetPartIcon(RawImage target, BeybladePart part)
+    {
+        if (target == null || part == null) return;
+        if (part.partIcon != null)
+        {
+            target.texture = part.partIcon.texture;
+            target.uvRect = new Rect(0f, 0f, 1f, 1f);
+            return;
+        }
+        PartStudio studio = PartStudio.Get();
+        target.texture = studio.Atlas;
+        PartType type = part.type;
+        string id = part.partID;
+        target.uvRect = studio.IconRect("part_" + id,
+            parent => ProceduralBeyFactory.BuildPart(type, id, parent, 0.95f),
+            type == PartType.PerformanceTip ? -18f : -58f);
     }
 
     void TryBuy(BeybladePart part)
