@@ -111,40 +111,12 @@ public class CustomizationUI : MonoBehaviour
         RefreshUI();
     }
 
-    /// <summary>Takılı parçaların savaştaki statları (BeybladeController ile aynı formül).</summary>
-    public static BeyStatBlock ComputeEquippedStats(PartDatabase db)
-    {
-        db = PartDatabase.Resolve(db);
-        var d = PlayerDataManager.Instance != null ? PlayerDataManager.Instance.data : null;
-        BeybladePart l = d != null ? db.GetPartByID(d.equippedLayerID) : null;
-        BeybladePart k = d != null ? db.GetPartByID(d.equippedDiskID) : null;
-        BeybladePart t = d != null ? db.GetPartByID(d.equippedTipID) : null;
-        if (l == null) l = db.GetPartByID(DefaultPartCatalog.StarterLayer);
-        if (k == null) k = db.GetPartByID(DefaultPartCatalog.StarterDisk);
-        if (t == null) t = db.GetPartByID(DefaultPartCatalog.StarterTip);
-
-        var list = new List<PartStats>();
-        if (l != null) list.Add(l.ToStats());
-        if (k != null) list.Add(k.ToStats());
-        if (t != null) list.Add(t.ToStats());
-        return BeyStatCalculator.Compute(list.ToArray());
-    }
-
-    public static string ArchetypeName(BeyArchetype a)
-    {
-        switch (a)
-        {
-            case BeyArchetype.Attack: return "SALDIRI";
-            case BeyArchetype.Defense: return "SAVUNMA";
-            case BeyArchetype.Stamina: return "DAYANIKLILIK";
-            default: return "DENGE";
-        }
-    }
+    public static string ArchetypeName(BeyArchetype a) => PlayerLoadout.ArchetypeName(a);
 
     private void UpdateStatBars()
     {
         if (partDatabase == null) return;
-        BeyStatBlock s = ComputeEquippedStats(partDatabase);
+        BeyStatBlock s = PlayerLoadout.ComputeStats(partDatabase);
 
         // Bar 0'da tamamen boş görünmesin diye küçük bir taban
         if (attackBar != null) attackBar.fillAmount = Mathf.Lerp(0.06f, 1f, s.AttackNorm);

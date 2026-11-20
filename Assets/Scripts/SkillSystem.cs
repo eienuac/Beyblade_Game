@@ -1,4 +1,5 @@
 using UnityEngine;
+using BeybladeCore;
 
 /// <summary>
 /// Savaş skill sistemi: enerji birikimi, timing kalitesi, Attack/Defense efektleri.
@@ -19,13 +20,12 @@ public class SkillSystem : MonoBehaviour
     public float maxEnergy = 100f;
     public float energy = 0f;
     [Tooltip("Saniye başına pasif enerji (fırlatıldıktan sonra)")]
-    public float passiveEnergyPerSec = 5.5f;
+    public float passiveEnergyPerSec = 2.55f;
     [Tooltip("Her çarpışmada ek enerji")]
-    public float collisionEnergy = 9f;
+    public float collisionEnergy = 5f;
 
     [Header("Denge")]
-    public float cooldownSeconds = 2.2f;
-    public float aiReactionDelay = 0.35f;
+    public float cooldownSeconds = 3f;
 
     public Phase phase = Phase.ChargingEnergy;
     public float lastTimingQuality = 0f;
@@ -56,7 +56,6 @@ public class SkillSystem : MonoBehaviour
     float orbitAngle;
     float activeDuration;
     float skillQuality;
-    bool aiQueued;
     GameObject shieldVisual;
     float lastUltContact = -10f;
     Vector3 ultPushDir;
@@ -67,11 +66,31 @@ public class SkillSystem : MonoBehaviour
     {
         bey = GetComponent<BeybladeController>();
         rb = GetComponent<Rigidbody>();
+        CombatTuning t = CombatTuning.Default;
+        passiveEnergyPerSec = t.SkillPassiveEnergy;
+        collisionEnergy = t.SkillCollisionEnergy;
+        cooldownSeconds = t.SkillCooldown;
+        ultDuration = SkillTuning.UltDuration;
+        ultDragDamagePerSec = SkillTuning.UltDragDps;
+        ultBaseKnockSpeed = SkillTuning.UltFinaleBaseKnock;
+        ultFinaleMultiplier = SkillTuning.UltFinaleMult;
+    }
+
+    public bool IsActive => phase == Phase.Active;
+    public float ActiveRatio => phase == Phase.Active && activeDuration > 0f ? Mathf.Clamp01(phaseTimer / activeDuration) : 0f;
+
+    /// <summary>Bot beyni (BotBrain) skill kullanmaya karar verdiğinde çağrılır.</summary>
+    public bool AiActivate(float quality)
+    {
+        if (bey == null || bey.isPlayer && !MatchContext.IsBalanceTest) return false;
+        if (phase != Phase.Ready || !bey.isLaunched || !bey.isSpinning) return false;
+        BeginSkill(quality);
+        return true;
     }
 
     void Start()
     {
-        if (bey != null && bey.isPlayer)
+        if (bey != null && bey.isPlayer && !MatchContext.IsBalanceTest)
         {
             ui = gameObject.AddComponent<SkillUI>();
             ui.Bind(this);
@@ -96,22 +115,11 @@ public class SkillSystem : MonoBehaviour
                 {
                     energy = maxEnergy;
                     phase = Phase.Ready;
-                    if (!bey.isPlayer) QueueAiSkill();
                 }
                 break;
 
             case Phase.Ready:
-                if (!bey.isPlayer && aiQueued)
-                {
-                    aiReactionDelay -= Time.deltaTime;
-                    if (aiReactionDelay <= 0f)
-                    {
-                        aiQueued = false;
-                        BeybladeCore.BotDifficulty diff = MatchContext.Difficulty;
-                        float q = Random.Range(diff.SkillQualityMin, diff.SkillQualityMax);
-                        BeginSkill(q);
-                    }
-                }
+                // Oyuncu dokunur; bot BeyControl → BotBrain üzerinden AiActivate çağırır
                 break;
 
             case Phase.Timing:
@@ -147,7 +155,7 @@ public class SkillSystem : MonoBehaviour
     }
 
     public float EnergyRatio => Mathf.Clamp01(energy / maxEnergy);
-    public bool CanActivate => phase == Phase.Ready && bey != null && bey.isPlayer && bey.isLaunched && bey.isSpinning;
+    public bool CanActivate => phase == Phase.Ready && bey != null && bey.isPlayer && !MatchContext.IsBalanceTest && bey.isLaunched && bey.isSpinning;
 
     public void OnCollisionEnergy()
     {
@@ -158,7 +166,6 @@ public class SkillSystem : MonoBehaviour
         {
             energy = maxEnergy;
             phase = Phase.Ready;
-            if (!bey.isPlayer) QueueAiSkill();
         }
     }
 
@@ -209,9 +216,8 @@ public class SkillSystem : MonoBehaviour
                 StartStaminaSkill();
                 break;
             default:
-                // Denge: kısa saldırı + hafif kalkan
+                // Denge: yörünge + hücum + biraz yenilenme
                 StartAttackSkill();
-                activeDuration *= 0.75f;
                 break;
         }
 
@@ -221,6 +227,7 @@ public class SkillSystem : MonoBehaviour
 
     void StartCinematic()
     {
+        if (MatchContext.IsBalanceTest) return;
         if (cineCam == null) cineCam = FindFirstObjectByType<TopDownCamera>();
         TopDownCamera cam = cineCam;
         if (cam == null) return;
@@ -247,7 +254,6 @@ public class SkillSystem : MonoBehaviour
         IsUltDragging = true;
         lastUltContact = -10f;
         ultSparkTimer = 0f;
-        bey.currentSpinRPM = Mathf.Min(bey.maxSpinRPM, bey.currentSpinRPM * Mathf.Lerp(1.08f, 1.22f, skillQuality));
     }
 
     static float ColliderRadius(Component c)
@@ -282,7 +288,7 @@ public class SkillSystem : MonoBehaviour
         {
             // Rakibe kilitlenip hücum et
             Vector3 flat = new Vector3(v.x, 0f, v.z);
-            Vector3 desired = dir * Mathf.Lerp(9f, 12f, skillQuality);
+            Vector3 desired = dir * SkillTuning.UltLockSpeed(skillQuality);
             flat = Vector3.MoveTowards(flat, desired, 40f * Time.fixedDeltaTime);
             rb.linearVelocity = new Vector3(flat.x, v.y, flat.z);
             return;
@@ -293,7 +299,7 @@ public class SkillSystem : MonoBehaviour
         ultPushDir = Vector3.Slerp(ultPushDir, dir, 0.08f).normalized;
         lastUltContact = Time.time;
 
-        float speed = ultDragSpeed * Mathf.Lerp(0.85f, 1.15f, skillQuality);
+        float speed = SkillTuning.UltDragSpeed(skillQuality);
 
         // Rakibi geriye sürükle: itme yönündeki hızı en az 'speed', yan kayma yarıya
         Vector3 ev = erb.linearVelocity;
@@ -308,7 +314,9 @@ public class SkillSystem : MonoBehaviour
         Vector3 myFlat = ultPushDir * speed + dir * Mathf.Clamp(gap * 6f, -2f, 2f);
         rb.linearVelocity = new Vector3(myFlat.x, v.y, myFlat.z);
 
-        enemy.currentStamina -= ultDragDamagePerSec * Time.fixedDeltaTime;
+        SkillSystem enemySkill = enemy.Skill;
+        float taken = enemySkill != null ? enemySkill.DamageTakenMultiplier : 1f;
+        enemy.currentStamina -= ultDragDamagePerSec * Time.fixedDeltaTime * taken;
 
         ultSparkTimer -= Time.fixedDeltaTime;
         if (ultSparkTimer <= 0f)
@@ -334,9 +342,12 @@ public class SkillSystem : MonoBehaviour
             dir.Normalize();
 
             // Rakip güçlendirilmiş savrulur, ulti sahibi normal geri seker
-            enemy.ApplyBurstKnockback(dir, ultBaseKnockSpeed * ultFinaleMultiplier * enemy.KnockbackTakenScale);
+            SkillSystem enemySkill = enemy.Skill;
+            bool enemyShield = enemySkill != null && enemySkill.IsShieldActive;
+            float enemyScale = enemy.KnockbackTakenScale * (enemyShield ? SkillTuning.ShieldKnockMult : 1f);
+            enemy.ApplyBurstKnockback(dir, ultBaseKnockSpeed * ultFinaleMultiplier * enemyScale);
             bey.ApplyBurstKnockback(-dir, ultBaseKnockSpeed * bey.KnockbackTakenScale);
-            enemy.currentStamina -= Mathf.Lerp(6f, 12f, skillQuality);
+            enemy.currentStamina -= SkillTuning.UltFinaleDamage(skillQuality) * (enemySkill != null ? enemySkill.DamageTakenMultiplier : 1f);
 
             Vector3 point = transform.position + dir * ColliderRadius(this);
             SpinEffect myFx = GetComponent<SpinEffect>();
@@ -350,34 +361,31 @@ public class SkillSystem : MonoBehaviour
 
     void StartAttackSkill()
     {
-        // Orbit ~1.1s + rush 3.6..5.0s
-        float orbit = 1.05f;
-        float rush = Mathf.Lerp(3.6f, 5.0f, skillQuality);
-        activeDuration = orbit + rush;
+        // Denge burst: kısa yörünge + hücum, biraz da dönüş yeniler (saldırı + dayanıklılık karışımı)
+        float orbit = SkillTuning.BurstOrbitTime;
+        activeDuration = orbit + SkillTuning.BurstRushTime(skillQuality);
         OverridesMovement = true;
         IsRushing = false;
-        RushDamageMultiplier = Mathf.Lerp(1.04f, 1.14f, skillQuality);
-        RushPushForce = Mathf.Lerp(1.8f, 4.2f, skillQuality);
-        // Kısa RPM boost
-        bey.currentSpinRPM = Mathf.Min(bey.maxSpinRPM, bey.currentSpinRPM * Mathf.Lerp(1.08f, 1.22f, skillQuality));
+        RushDamageMultiplier = SkillTuning.BurstDamageMult(skillQuality);
+        RushPushForce = SkillTuning.BurstPush(skillQuality);
+        bey.currentStamina = Mathf.Min(bey.maxStamina, bey.currentStamina + SkillTuning.BurstHeal(skillQuality));
     }
 
     void StartDefenseSkill()
     {
-        activeDuration = Mathf.Lerp(3.4f, 5.0f, skillQuality);
+        activeDuration = SkillTuning.ShieldDuration(skillQuality);
         IsShieldActive = true;
-        DamageTakenMultiplier = Mathf.Lerp(0.62f, 0.38f, skillQuality); // %38-62 hasar alır
+        DamageTakenMultiplier = SkillTuning.ShieldDamageTaken(skillQuality);
         SpawnShieldVisual();
     }
 
     void StartStaminaSkill()
     {
-        activeDuration = Mathf.Lerp(2.8f, 4.0f, skillQuality);
-        // Stamina yenile + hafif itme alanı
-        float heal = Mathf.Lerp(8f, 18f, skillQuality);
-        bey.currentStamina = Mathf.Min(bey.maxStamina, bey.currentStamina + heal);
+        activeDuration = SkillTuning.RegenDuration(skillQuality);
+        // Dönüşü yenile + hafif koruma
+        bey.currentStamina = Mathf.Min(bey.maxStamina, bey.currentStamina + SkillTuning.RegenHeal(skillQuality));
         IsShieldActive = true;
-        DamageTakenMultiplier = Mathf.Lerp(0.85f, 0.7f, skillQuality);
+        DamageTakenMultiplier = SkillTuning.RegenDamageTaken(skillQuality);
         SpawnShieldVisual(new Color(0.2f, 1f, 0.55f, 0.35f));
     }
 
@@ -392,8 +400,7 @@ public class SkillSystem : MonoBehaviour
 
         if (!IsUltDragging && (bey.beybladeType == BeybladeType.Saldiri || bey.beybladeType == BeybladeType.Denge))
         {
-            float orbitEnd = 1.15f * (bey.beybladeType == BeybladeType.Denge ? 0.75f : 1f);
-            IsRushing = phaseTimer >= orbitEnd;
+            IsRushing = phaseTimer >= SkillTuning.BurstOrbitTime;
 
             // Rush sırasında ekstra hasar SADECE gerçek çarpışmada OnCollisionEnter üzerinden
             // (burada sürekli itmek iç içe girmeye yol açıyordu)
@@ -411,7 +418,7 @@ public class SkillSystem : MonoBehaviour
         // Çarpışma sekmesi görünsün diye skill çekimini de kısa kes
         if (bey.IsSeekStunned) return;
 
-        float orbitEnd = 1.15f * (bey.beybladeType == BeybladeType.Denge ? 0.75f : 1f);
+        float orbitEnd = SkillTuning.BurstOrbitTime;
         Vector3 myPos = transform.position;
         Vector3 enemyPos = enemy.transform.position;
         Vector3 toEnemy = enemyPos - myPos;
@@ -430,19 +437,19 @@ public class SkillSystem : MonoBehaviour
 
         if (phaseTimer < orbitEnd)
         {
-            orbitAngle += Mathf.Lerp(220f, 320f, skillQuality) * Time.fixedDeltaTime;
+            orbitAngle += SkillTuning.BurstOrbitDegPerSec(skillQuality) * Time.fixedDeltaTime;
             float rad = orbitAngle * Mathf.Deg2Rad;
             Vector3 desired = new Vector3(enemyPos.x, myPos.y, enemyPos.z)
                 + new Vector3(Mathf.Cos(rad) * safeOrbit, 0f, Mathf.Sin(rad) * safeOrbit);
             Vector3 to = desired - myPos;
             to.y = 0f;
             // Hızı ezme — sadece kuvvet (GitHub fizik/çarpışma bozulmaz)
-            rb.AddForce(to.normalized * Mathf.Lerp(14f, 20f, skillQuality), ForceMode.Acceleration);
+            rb.AddForce(to.normalized * SkillTuning.BurstOrbitForce(skillQuality), ForceMode.Acceleration);
         }
         else
         {
             // Hücum: düşmana doğru agresif çekim; temas Unity çarpışması + knockback ile olur
-            float pull = Mathf.Lerp(12f, 18f, skillQuality);
+            float pull = SkillTuning.BurstRushPull(skillQuality);
             rb.AddForce(toEnemy.normalized * pull, ForceMode.Acceleration);
 
             // Çok yaklaşırsa içeri itme — radial ayrılma kuvveti
@@ -460,36 +467,34 @@ public class SkillSystem : MonoBehaviour
             rb.linearVelocity = new Vector3(flat.normalized.x * 15f, rb.linearVelocity.y, flat.normalized.z * 15f);
     }
 
+    /// <summary>Kalkan aktifken çarpan rakibi geri iter (yalnızca Savunma kalkanı). awayFromMe: benden rakibe.</summary>
     public void OnShieldParry(BeybladeController attacker, Vector3 awayFromMe)
     {
-        if (!IsShieldActive || attacker == null) return;
+        if (!IsShieldActive || attacker == null || bey == null) return;
+        if (bey.beybladeType != BeybladeType.Savunma) return;
         Rigidbody arb = attacker.GetComponent<Rigidbody>();
         if (arb == null || arb.isKinematic) return;
 
         Vector3 dir = awayFromMe;
         dir.y = 0f;
-        if (dir.sqrMagnitude < 0.01f)
-            dir = (attacker.transform.position - transform.position);
-
+        if (dir.sqrMagnitude < 0.01f) dir = attacker.transform.position - transform.position;
         dir.y = 0f;
         if (dir.sqrMagnitude < 0.01f) return;
         dir.Normalize();
 
-        float force = Mathf.Lerp(4.5f, 8.5f, skillQuality);
-        arb.AddForce(dir * force, ForceMode.Impulse);
-
-        // Hafif kendi stamina maliyeti yok; saldırgana küçük tepki hasarı
-        attacker.currentStamina -= Mathf.Lerp(1.2f, 2.8f, skillQuality);
+        arb.AddForce(dir * SkillTuning.ParryImpulse(skillQuality), ForceMode.Impulse);
+        attacker.currentStamina -= SkillTuning.ParryDamage(skillQuality);
     }
 
     void EndSkill()
     {
         if (IsUltDragging)
         {
-            // Ulti yarıda kesildi (devrilme vb.): final yok, kamerayı bırak
+            // Ulti yarıda kesildi (devrilme vb.): final yok
             IsUltDragging = false;
-            if (cineCam != null) cineCam.CinematicFinale(transform, false);
         }
+        // Kamera: özellik bitti → yumuşakça normal kameraya dön
+        if (cineCam != null) cineCam.EndSkillCinematic(transform);
         phase = Phase.Cooldown;
         phaseTimer = 0f;
         OverridesMovement = false;
@@ -499,13 +504,6 @@ public class SkillSystem : MonoBehaviour
         RushDamageMultiplier = 1f;
         RushPushForce = 0f;
         ClearShieldVisual();
-    }
-
-    void QueueAiSkill()
-    {
-        aiQueued = true;
-        BeybladeCore.BotDifficulty diff = MatchContext.Difficulty;
-        aiReactionDelay = Random.Range(diff.SkillReactionMin, diff.SkillReactionMax);
     }
 
     void FindEnemy()

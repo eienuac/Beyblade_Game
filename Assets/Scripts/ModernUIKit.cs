@@ -5,7 +5,7 @@ using UnityEngine.TextCore.LowLevel;
 using TMPro;
 
 /// <summary>
-/// QuadStrike tarzı runtime UI: Rajdhani tipografi, hex butonlar, arena backdrop.
+/// Koddan kurulan modern arayüz kiti: Rajdhani tipografi, keskin halkalar, eğik paneller, arena arka planı.
 /// </summary>
 public static class ModernUIKit
 {
@@ -33,6 +33,7 @@ public static class ModernUIKit
 
     static Sprite roundSprite, softCardSprite, sharpCardSprite, circleSprite, hexSprite, ringSprite, gradientSprite;
     static Sprite trapLeftSprite, trapRightSprite, honeycombSprite, hexGridSprite;
+    static Sprite discSprite, thickRingSprite, thinRingSprite, skewSprite, glowSprite, chevronSprite;
     static TMP_FontAsset fontDisplay, fontTitle, fontBody;
     static bool fontsReady;
 
@@ -47,6 +48,17 @@ public static class ModernUIKit
     public static Sprite TrapRightSprite { get { if (trapRightSprite == null) trapRightSprite = BuildTrapezoid(128, 96, false); return trapRightSprite; } }
     public static Sprite HoneycombSprite { get { if (honeycombSprite == null) honeycombSprite = BuildHoneycomb(128); return honeycombSprite; } }
     public static Sprite HexGridSprite { get { if (hexGridSprite == null) hexGridSprite = BuildHexGrid(256); return hexGridSprite; } }
+
+    /// <summary>Keskin kenarlı dolu daire (CircleSprite yumuşak bir parıltıdır).</summary>
+    public static Sprite DiscSprite { get { if (discSprite == null) discSprite = BuildCrispRing(256, 0f, 1f); return discSprite; } }
+    /// <summary>Kalın keskin halka (gösterge izi / radyal dolum için).</summary>
+    public static Sprite ThickRingSprite { get { if (thickRingSprite == null) thickRingSprite = BuildCrispRing(256, 0.8f, 1f); return thickRingSprite; } }
+    public static Sprite ThinRingSprite { get { if (thinRingSprite == null) thinRingSprite = BuildCrispRing(256, 0.94f, 1f); return thinRingSprite; } }
+    /// <summary>Eğik (paralelkenar) panel — dilimlenebilir.</summary>
+    public static Sprite SkewSprite { get { if (skewSprite == null) skewSprite = BuildSkew(128, 64, 20); return skewSprite; } }
+    public static Sprite GlowSprite { get { if (glowSprite == null) glowSprite = BuildGlow(128); return glowSprite; } }
+    /// <summary>Aşağı bakan ok (işaretçi).</summary>
+    public static Sprite ChevronSprite { get { if (chevronSprite == null) chevronSprite = BuildChevron(64); return chevronSprite; } }
 
     public static void EnsureFonts()
     {
@@ -167,55 +179,6 @@ public static class ModernUIKit
         tmp.outlineWidth = 0.18f;
         tmp.outlineColor = new Color32(20, 80, 160, 160);
         return tmp;
-    }
-
-    public static RectTransform MakeQuadStrikeLogo(Transform parent, float scale = 1f)
-    {
-        GameObject root = new GameObject("QSLogo");
-        root.transform.SetParent(parent, false);
-        RectTransform rt = root.AddComponent<RectTransform>();
-        rt.sizeDelta = new Vector2(900f * scale, 280f * scale);
-
-        Image swoosh = MakeImage(rt, "Swoosh", new Color(0.15f, 0.55f, 1f, 0.45f), CircleSprite, false);
-        Anchor(swoosh.rectTransform, new Vector2(0.5f, 0.62f), new Vector2(0.5f, 0.62f), new Vector2(0.5f, 0.5f), new Vector2(-40f * scale, 10f * scale), new Vector2(520f * scale, 200f * scale));
-        swoosh.raycastTarget = false;
-        swoosh.rectTransform.localEulerAngles = new Vector3(0, 0, -18f);
-
-        TextMeshProUGUI bey = Label(rt, "Beyblade", "BEYBLADE", 78f * scale, Color.white, FontRole.Display);
-        bey.fontStyle = FontStyles.Bold | FontStyles.Italic;
-        bey.characterSpacing = 2f;
-        bey.enableVertexGradient = true;
-        bey.colorGradient = new VertexGradient(Color.white, Color.white, new Color(0.7f, 0.85f, 1f), new Color(0.55f, 0.7f, 0.9f));
-        bey.outlineWidth = 0.28f;
-        bey.outlineColor = new Color32(0, 0, 0, 220);
-        Anchor(bey.rectTransform, new Vector2(0.5f, 0.72f), new Vector2(0.5f, 0.72f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(860f * scale, 100f * scale));
-
-        TextMeshProUGUI burst = Label(rt, "Burst", "BURST", 34f * scale, Gold, FontRole.Display);
-        burst.fontStyle = FontStyles.Bold | FontStyles.Italic;
-        burst.characterSpacing = 8f;
-        burst.outlineWidth = 0.15f;
-        burst.outlineColor = new Color32(80, 40, 0, 180);
-        Anchor(burst.rectTransform, new Vector2(0.62f, 0.48f), new Vector2(0.62f, 0.48f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(280f * scale, 48f * scale));
-
-        TextMeshProUGUI quad = Label(rt, "Quad", "QUAD", 48f * scale, new Color(1f, 0.28f, 0.18f), FontRole.Display);
-        quad.fontStyle = FontStyles.Bold | FontStyles.Italic;
-        quad.outlineWidth = 0.2f;
-        quad.outlineColor = new Color32(40, 0, 0, 200);
-        Anchor(quad.rectTransform, new Vector2(0.32f, 0.22f), new Vector2(0.32f, 0.22f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(280f * scale, 60f * scale));
-
-        TextMeshProUGUI strike = Label(rt, "Strike", "STRIKE", 48f * scale, Electric, FontRole.Display);
-        strike.fontStyle = FontStyles.Bold | FontStyles.Italic;
-        strike.outlineWidth = 0.2f;
-        strike.outlineColor = new Color32(0, 40, 80, 200);
-        Anchor(strike.rectTransform, new Vector2(0.68f, 0.22f), new Vector2(0.68f, 0.22f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(360f * scale, 60f * scale));
-
-        // Sarı elmas (font glyph değil — Image, uyarı yok)
-        Image diamond = MakeImage(rt, "Dia", Gold, null, false);
-        diamond.sprite = null;
-        Anchor(diamond.rectTransform, new Vector2(0.58f, 0.38f), new Vector2(0.58f, 0.38f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(12f * scale, 12f * scale));
-        diamond.rectTransform.localEulerAngles = new Vector3(0f, 0f, 45f);
-        diamond.raycastTarget = false;
-        return rt;
     }
 
     public static void MakeArenaBackdrop(Transform parent)
@@ -517,6 +480,173 @@ public static class ModernUIKit
                 float fy = Mathf.Abs(py % 1f - 0.5f);
                 float d = Mathf.Max(fx * 0.866f + fy * 0.5f, fy);
                 float a = (d > 0.44f && d < 0.49f) ? 0.55f : 0.08f;
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+            }
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
+    }
+    // ================= Modern bileşenler =================
+
+    /// <summary>Eğik panel (Sliced).</summary>
+    public static Image MakeSkewPanel(Transform parent, string name, Color color)
+    {
+        Image img = MakeImage(parent, name, color, SkewSprite, true);
+        img.raycastTarget = false;
+        return img;
+    }
+
+    /// <summary>Radyal dolan halka (Filled, Radial360, üstten saat yönünde).</summary>
+    public static Image MakeRadialRing(Transform parent, string name, Color color, bool thick = true)
+    {
+        Image img = MakeImage(parent, name, color, thick ? ThickRingSprite : ThinRingSprite, false);
+        img.type = Image.Type.Filled;
+        img.fillMethod = Image.FillMethod.Radial360;
+        img.fillOrigin = (int)Image.Origin360.Top;
+        img.fillClockwise = true;
+        img.raycastTarget = false;
+        return img;
+    }
+
+    /// <summary>Yatay dolan bar (Filled, soldan veya sağdan).</summary>
+    public static Image MakeHorizontalFill(Transform parent, string name, Color color, bool fromRight = false)
+    {
+        Image img = MakeImage(parent, name, color, null, false);
+        img.sprite = null;
+        img.type = Image.Type.Filled;
+        img.fillMethod = Image.FillMethod.Horizontal;
+        img.fillOrigin = fromRight ? (int)Image.OriginHorizontal.Right : (int)Image.OriginHorizontal.Left;
+        img.raycastTarget = false;
+        return img;
+    }
+
+    /// <summary>Küçük tuş ipucu rozeti (ör. "SHIFT").</summary>
+    public static TextMeshProUGUI MakeKeyHint(Transform parent, string name, string key, Vector2 anchor, Vector2 pos)
+    {
+        Image chip = MakeImage(parent, name, new Color(1f, 1f, 1f, 0.12f), SharpCardSprite);
+        chip.raycastTarget = false;
+        float w = Mathf.Max(34f, 12f + key.Length * 11f);
+        Anchor(chip.rectTransform, anchor, anchor, new Vector2(0.5f, 0.5f), pos, new Vector2(w, 26f));
+        TextMeshProUGUI t = Label(chip.transform, "K", key, 14, new Color(1f, 1f, 1f, 0.85f), FontRole.Title);
+        t.fontStyle = FontStyles.Bold;
+        t.characterSpacing = 1f;
+        Stretch(t.rectTransform);
+        return t;
+    }
+
+    public static Color WithAlpha(Color c, float a) => new Color(c.r, c.g, c.b, a);
+
+    /// <summary>Tipin vurgu rengi (HUD, kartlar, efektler aynı dili konuşsun).</summary>
+    public static Color TypeColor(BeybladeType t)
+    {
+        switch (t)
+        {
+            case BeybladeType.Saldiri: return Heat;
+            case BeybladeType.Savunma: return Cyan;
+            case BeybladeType.Dayaniklilik: return Mint;
+            default: return Gold;
+        }
+    }
+
+    public static string TypeName(BeybladeType t)
+    {
+        switch (t)
+        {
+            case BeybladeType.Saldiri: return "SALDIRI";
+            case BeybladeType.Savunma: return "SAVUNMA";
+            case BeybladeType.Dayaniklilik: return "DAYANIKLILIK";
+            default: return "DENGE";
+        }
+    }
+
+    public static string SkillName(BeybladeType t)
+    {
+        switch (t)
+        {
+            case BeybladeType.Saldiri: return "HÜCUM";
+            case BeybladeType.Savunma: return "KALKAN";
+            case BeybladeType.Dayaniklilik: return "YENİLEN";
+            default: return "BURST";
+        }
+    }
+
+    /// <summary>Basit buton efekti: üstüne gelince/basınca ölçek.</summary>
+    public static void AddPressFeedback(Button btn)
+    {
+        if (btn == null) return;
+        ColorBlock cb = btn.colors;
+        cb.normalColor = Color.white;
+        cb.highlightedColor = new Color(1.12f, 1.12f, 1.12f, 1f);
+        cb.pressedColor = new Color(0.82f, 0.82f, 0.82f, 1f);
+        cb.selectedColor = Color.white;
+        cb.fadeDuration = 0.08f;
+        btn.colors = cb;
+    }
+
+    static Sprite BuildCrispRing(int size, float inner, float outer)
+    {
+        Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        tex.wrapMode = TextureWrapMode.Clamp;
+        float c = (size - 1) * 0.5f;
+        float px = 1f / c; // bir pikselin normalize boyu
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                float d = Vector2.Distance(new Vector2(x, y), new Vector2(c, c)) / c;
+                float aOuter = Mathf.Clamp01((outer - d) / px + 0.5f);
+                float aInner = inner <= 0f ? 1f : Mathf.Clamp01((d - inner) / px + 0.5f);
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, Mathf.Min(aOuter, aInner)));
+            }
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
+    }
+
+    static Sprite BuildSkew(int w, int h, int skew)
+    {
+        Texture2D tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+        tex.wrapMode = TextureWrapMode.Clamp;
+        for (int y = 0; y < h; y++)
+        {
+            float t = (float)y / (h - 1);
+            float left = Mathf.Lerp(0f, skew, t);
+            float right = w - 1 - Mathf.Lerp(skew, 0f, t);
+            for (int x = 0; x < w; x++)
+            {
+                float a = Mathf.Clamp01(Mathf.Min(x - left, right - x) + 0.5f);
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+            }
+        }
+        tex.Apply();
+        int b = skew + 2;
+        return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect, new Vector4(b, 2, b, 2));
+    }
+
+    static Sprite BuildGlow(int size)
+    {
+        Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        float c = (size - 1) * 0.5f;
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                float d = Vector2.Distance(new Vector2(x, y), new Vector2(c, c)) / c;
+                float a = Mathf.Clamp01(1f - d);
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, a * a * a));
+            }
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
+    }
+
+    static Sprite BuildChevron(int size)
+    {
+        Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        float c = (size - 1) * 0.5f;
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                // Aşağı bakan dolu üçgen
+                float t = (float)y / (size - 1);           // 0 alt, 1 üst
+                float half = t * c * 0.95f;
+                float dx = Mathf.Abs(x - c);
+                float a = Mathf.Clamp01(half - dx + 0.5f) * Mathf.Clamp01((float)(size - 1 - y) + 0.5f);
                 tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
             }
         tex.Apply();

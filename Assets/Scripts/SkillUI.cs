@@ -4,42 +4,46 @@ using UnityEngine.InputSystem;
 using TMPro;
 
 /// <summary>
-/// Modern skill HUD: enerji halkası + timing bar + feedback.
+/// Özel güç HUD'u: sağ altta büyük skill butonu (enerji halkası, tip rengi), zamanlama çubuğu, sonuç yazısı.
+/// Aktivasyon: butona dokun / E / gamepad Y. Zamanlama: SPACE / E / dokun / gamepad A.
 /// </summary>
 public class SkillUI : MonoBehaviour
 {
     SkillSystem skill;
+    BeybladeController bey;
 
     Canvas canvas;
-    Image energyFill;
-    Image energyGlow;
-    Image readyPulse;
-    Image energyFrame;
+
+    // Buton
+    RectTransform btnRoot;
+    Image glow, baseDisc, track, energyRing, activeRing, inner, readyPulse;
+    TextMeshProUGUI nameLabel, stateLabel;
     Button activateBtn;
-    TextMeshProUGUI energyLabel;
-    TextMeshProUGUI hintLabel;
-    TextMeshProUGUI skillNameLabel;
+    float pulseT;
 
+    // Zamanlama
     GameObject timingRoot;
-    Image timingNeedle;
-    Image greenZone;
-    TextMeshProUGUI timingHint;
-    TextMeshProUGUI feedbackLabel;
-    Image feedbackGlow;
-
-    float needlePos;
-    float needleDir = 1f;
-    float needleSpeed = 1.35f;
-    float greenCenter = 0.55f;
-    float greenHalf = 0.09f;
+    RectTransform barRect;
+    Image needle, needleGlow, perfectZone, goodZone;
+    TextMeshProUGUI timingTitle;
+    float needlePos, needleDir = 1f, needleSpeed = 1.35f;
+    float greenCenter = 0.55f, greenHalf = 0.085f;
     bool timingOpen;
+    float timingOpenedAt;
+
+    // Sonuç
+    TextMeshProUGUI feedbackLabel, feedbackSub;
+    Image feedbackLine;
     float feedbackTimer;
 
     public void Bind(SkillSystem s)
     {
         skill = s;
+        bey = s.GetComponent<BeybladeController>();
         BuildUI();
     }
+
+    Color TypeCol => bey != null ? ModernUIKit.TypeColor(bey.beybladeType) : ModernUIKit.Cyan;
 
     void BuildUI()
     {
@@ -47,152 +51,153 @@ public class SkillUI : MonoBehaviour
         ModernUIKit.EnsureFonts();
         canvas = ModernUIKit.CreateCanvas("SkillUI", 200);
 
-        // Enerji kartı — sağ alt
-        energyFrame = ModernUIKit.MakeImage(canvas.transform, "EnergyFrame", new Color(0.04f, 0.07f, 0.14f, 0.94f), ModernUIKit.CircleSprite, false);
-        ModernUIKit.Anchor(energyFrame.rectTransform, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-42f, 42f), new Vector2(168f, 168f));
-        Outline frameOl = energyFrame.gameObject.AddComponent<Outline>();
-        frameOl.effectColor = new Color(ModernUIKit.Cyan.r, ModernUIKit.Cyan.g, ModernUIKit.Cyan.b, 0.55f);
-        frameOl.effectDistance = new Vector2(2f, -2f);
-        Shadow frameSh = energyFrame.gameObject.AddComponent<Shadow>();
-        frameSh.effectColor = new Color(0f, 0f, 0f, 0.55f);
-        frameSh.effectDistance = new Vector2(0f, -10f);
+        // ---------- Skill butonu (sağ alt) ----------
+        const float size = 200f;
+        GameObject rootObj = new GameObject("SkillButton");
+        rootObj.transform.SetParent(canvas.transform, false);
+        btnRoot = rootObj.AddComponent<RectTransform>();
+        ModernUIKit.Anchor(btnRoot, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-64f, 46f), new Vector2(size, size));
 
-        energyGlow = ModernUIKit.MakeImage(energyFrame.transform, "Glow", new Color(0.2f, 0.9f, 1f, 0.12f), ModernUIKit.CircleSprite, false);
-        ModernUIKit.Stretch(energyGlow.rectTransform, -22, -22, -22, -22);
-        energyGlow.raycastTarget = false;
+        glow = ModernUIKit.MakeImage(btnRoot, "Glow", ModernUIKit.WithAlpha(TypeCol, 0f), ModernUIKit.GlowSprite, false);
+        glow.raycastTarget = false;
+        ModernUIKit.Stretch(glow.rectTransform, -70, -70, -70, -70);
 
-        Image track = ModernUIKit.MakeImage(energyFrame.transform, "Track", new Color(1f, 1f, 1f, 0.07f), ModernUIKit.CircleSprite, false);
-        ModernUIKit.Stretch(track.rectTransform, 16, 16, 16, 16);
+        baseDisc = ModernUIKit.MakeImage(btnRoot, "Base", new Color(0.03f, 0.05f, 0.1f, 0.92f), ModernUIKit.DiscSprite, false);
+        ModernUIKit.Stretch(baseDisc.rectTransform);
+
+        track = ModernUIKit.MakeImage(btnRoot, "Track", new Color(1f, 1f, 1f, 0.08f), ModernUIKit.ThickRingSprite, false);
         track.raycastTarget = false;
+        ModernUIKit.Stretch(track.rectTransform);
 
-        energyFill = ModernUIKit.MakeImage(energyFrame.transform, "Fill", ModernUIKit.Cyan, ModernUIKit.CircleSprite, false);
-        ModernUIKit.Stretch(energyFill.rectTransform, 16, 16, 16, 16);
-        energyFill.type = Image.Type.Filled;
-        energyFill.fillMethod = Image.FillMethod.Radial360;
-        energyFill.fillOrigin = (int)Image.Origin360.Top;
-        energyFill.fillClockwise = true;
-        energyFill.fillAmount = 0f;
-        energyFill.raycastTarget = false;
+        energyRing = ModernUIKit.MakeRadialRing(btnRoot, "Energy", TypeCol);
+        ModernUIKit.Stretch(energyRing.rectTransform);
 
-        Image inner = ModernUIKit.MakeImage(energyFrame.transform, "Inner", new Color(0.03f, 0.05f, 0.1f, 0.92f), ModernUIKit.CircleSprite, false);
-        ModernUIKit.Stretch(inner.rectTransform, 34, 34, 34, 34);
+        activeRing = ModernUIKit.MakeRadialRing(btnRoot, "Active", Color.white, false);
+        ModernUIKit.Stretch(activeRing.rectTransform, -10, -10, -10, -10);
+        activeRing.fillAmount = 0f;
+
+        inner = ModernUIKit.MakeImage(btnRoot, "Inner", ModernUIKit.WithAlpha(TypeCol, 0.1f), ModernUIKit.DiscSprite, false);
         inner.raycastTarget = false;
+        ModernUIKit.Stretch(inner.rectTransform, 30, 30, 30, 30);
 
-        readyPulse = ModernUIKit.MakeImage(energyFrame.transform, "Ready", new Color(0.3f, 1f, 0.5f, 0f), ModernUIKit.CircleSprite, false);
-        ModernUIKit.Stretch(readyPulse.rectTransform, -10, -10, -10, -10);
+        readyPulse = ModernUIKit.MakeImage(btnRoot, "Pulse", ModernUIKit.WithAlpha(TypeCol, 0f), ModernUIKit.ThinRingSprite, false);
         readyPulse.raycastTarget = false;
+        ModernUIKit.Stretch(readyPulse.rectTransform);
 
-        energyLabel = ModernUIKit.Label(energyFrame.transform, "Pct", "0%", 30, Color.white);
-        energyLabel.fontStyle = FontStyles.Bold;
-        ModernUIKit.Anchor(energyLabel.rectTransform, new Vector2(0.5f, 0.52f), new Vector2(0.5f, 0.52f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(120f, 40f));
+        nameLabel = ModernUIKit.Label(btnRoot, "Name", "ÖZEL", 30, Color.white, ModernUIKit.FontRole.Display);
+        nameLabel.fontStyle = FontStyles.Bold | FontStyles.Italic;
+        nameLabel.characterSpacing = 2f;
+        ModernUIKit.Anchor(nameLabel.rectTransform, new Vector2(0.5f, 0.55f), new Vector2(0.5f, 0.55f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(150f, 38f));
 
-        hintLabel = ModernUIKit.Label(energyFrame.transform, "Hint", "SKILL", 13, ModernUIKit.Dim);
-        hintLabel.characterSpacing = 3f;
-        hintLabel.fontStyle = FontStyles.Bold;
-        ModernUIKit.Anchor(hintLabel.rectTransform, new Vector2(0.5f, 0.28f), new Vector2(0.5f, 0.28f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(120f, 22f));
+        stateLabel = ModernUIKit.Label(btnRoot, "State", "0%", 16, ModernUIKit.Dim, ModernUIKit.FontRole.Title);
+        stateLabel.fontStyle = FontStyles.Bold;
+        stateLabel.characterSpacing = 3f;
+        ModernUIKit.Anchor(stateLabel.rectTransform, new Vector2(0.5f, 0.34f), new Vector2(0.5f, 0.34f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(140f, 22f));
 
-        skillNameLabel = ModernUIKit.Label(canvas.transform, "SkillName", "OZEL SALDIRI", 14, ModernUIKit.Dim);
-        skillNameLabel.fontStyle = FontStyles.Bold;
-        skillNameLabel.characterSpacing = 2f;
-        ModernUIKit.Anchor(skillNameLabel.rectTransform, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-42f, 220f), new Vector2(180f, 28f));
+        bool touch = Touchscreen.current != null || Application.isMobilePlatform;
+        if (!touch) ModernUIKit.MakeKeyHint(btnRoot, "Key", "E", new Vector2(0.5f, 0f), new Vector2(0f, -2f));
 
-        activateBtn = energyFrame.gameObject.AddComponent<Button>();
-        activateBtn.targetGraphic = energyFrame;
+        activateBtn = baseDisc.gameObject.AddComponent<Button>();
+        activateBtn.targetGraphic = baseDisc;
         activateBtn.transition = Selectable.Transition.None;
-        activateBtn.onClick.AddListener(OnEnergyClicked);
+        activateBtn.onClick.AddListener(OnSkillPressed);
 
-        // Timing overlay
-        timingRoot = ModernUIKit.MakeImage(canvas.transform, "TimingRoot", new Color(0.01f, 0.02f, 0.05f, 0.62f), null, false).gameObject;
+        // ---------- Zamanlama ----------
+        timingRoot = ModernUIKit.MakeImage(canvas.transform, "TimingRoot", new Color(0f, 0.01f, 0.03f, 0.35f), null, false).gameObject;
         ModernUIKit.Stretch(timingRoot.GetComponent<RectTransform>());
         timingRoot.GetComponent<Image>().sprite = null;
         timingRoot.SetActive(false);
 
-        Image panel = ModernUIKit.MakeGlassCard(timingRoot.transform, "TimingPanel", new Vector2(780f, 160f));
-        ModernUIKit.Anchor(panel.rectTransform, new Vector2(0.5f, 0.26f), new Vector2(0.5f, 0.26f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(780f, 160f));
+        timingTitle = ModernUIKit.Label(timingRoot.transform, "Title", "ZAMANLA!", 40, Color.white, ModernUIKit.FontRole.Display);
+        timingTitle.fontStyle = FontStyles.Bold | FontStyles.Italic;
+        timingTitle.characterSpacing = 10f;
+        ModernUIKit.Anchor(timingTitle.rectTransform, new Vector2(0.5f, 0.36f), new Vector2(0.5f, 0.36f), new Vector2(0.5f, 0.5f), new Vector2(0f, 46f), new Vector2(800f, 50f));
 
-        timingHint = ModernUIKit.Label(panel.transform, "THint", "YESILDE DOKUN", 26, Color.white);
-        timingHint.fontStyle = FontStyles.Bold;
-        timingHint.characterSpacing = 4f;
-        ModernUIKit.Anchor(timingHint.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -18f), new Vector2(700f, 36f));
+        TextMeshProUGUI hint = ModernUIKit.Label(timingRoot.transform, "Hint", touch ? "ALTIN BÖLGEDE DOKUN" : "ALTIN BÖLGEDE  SPACE / E", 15, ModernUIKit.Dim, ModernUIKit.FontRole.Title);
+        hint.characterSpacing = 4f;
+        ModernUIKit.Anchor(hint.rectTransform, new Vector2(0.5f, 0.36f), new Vector2(0.5f, 0.36f), new Vector2(0.5f, 0.5f), new Vector2(0f, -40f), new Vector2(800f, 24f));
 
-        Image barBg = ModernUIKit.MakeImage(panel.transform, "BarBg", new Color(0.05f, 0.07f, 0.12f, 0.98f), ModernUIKit.RoundSprite);
-        ModernUIKit.Anchor(barBg.rectTransform, new Vector2(0.5f, 0.38f), new Vector2(0.5f, 0.38f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(700f, 56f));
+        Image bar = ModernUIKit.MakeImage(timingRoot.transform, "Bar", new Color(0.02f, 0.03f, 0.07f, 0.95f), null, false);
+        bar.sprite = null;
+        barRect = bar.rectTransform;
+        ModernUIKit.Anchor(barRect, new Vector2(0.5f, 0.36f), new Vector2(0.5f, 0.36f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(820f, 22f));
+        Outline bol = bar.gameObject.AddComponent<Outline>();
+        bol.effectColor = new Color(1f, 1f, 1f, 0.15f);
+        bol.effectDistance = new Vector2(1f, -1f);
 
-        Image goodZone = ModernUIKit.MakeImage(barBg.transform, "GoodZone", new Color(0.95f, 0.85f, 0.2f, 0.2f), null, false);
+        goodZone = ModernUIKit.MakeImage(bar.transform, "Good", ModernUIKit.WithAlpha(ModernUIKit.Cyan, 0.3f), null, false);
         goodZone.sprite = null;
+        goodZone.raycastTarget = false;
+        perfectZone = ModernUIKit.MakeImage(bar.transform, "Perfect", ModernUIKit.WithAlpha(ModernUIKit.Gold, 0.9f), null, false);
+        perfectZone.sprite = null;
+        perfectZone.raycastTarget = false;
 
-        greenZone = ModernUIKit.MakeImage(barBg.transform, "Green", new Color(0.25f, 0.95f, 0.45f, 0.55f), null, false);
-        greenZone.sprite = null;
+        needleGlow = ModernUIKit.MakeImage(bar.transform, "NeedleGlow", new Color(1f, 1f, 1f, 0.35f), ModernUIKit.GlowSprite, false);
+        needleGlow.raycastTarget = false;
+        needle = ModernUIKit.MakeImage(bar.transform, "Needle", Color.white, null, false);
+        needle.sprite = null;
+        needle.raycastTarget = false;
 
-        timingNeedle = ModernUIKit.MakeImage(barBg.transform, "Needle", Color.white, null, false);
-        timingNeedle.sprite = null;
-        ModernUIKit.Anchor(timingNeedle.rectTransform, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(5f, 0f));
-        Outline nOl = timingNeedle.gameObject.AddComponent<Outline>();
-        nOl.effectColor = new Color(1f, 1f, 1f, 0.8f);
-        nOl.effectDistance = new Vector2(1.5f, 0f);
-
-        Button catcher = timingRoot.GetComponent<Button>();
-        if (catcher == null) catcher = timingRoot.AddComponent<Button>();
+        Button catcher = timingRoot.AddComponent<Button>();
         catcher.transition = Selectable.Transition.None;
         catcher.onClick.AddListener(LockTiming);
 
-        feedbackGlow = ModernUIKit.MakeImage(canvas.transform, "FeedbackGlow", new Color(1f, 1f, 1f, 0f), ModernUIKit.SoftCardSprite);
-        ModernUIKit.Anchor(feedbackGlow.rectTransform, new Vector2(0.5f, 0.58f), new Vector2(0.5f, 0.58f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(520f, 72f));
-        feedbackGlow.raycastTarget = false;
-        feedbackGlow.gameObject.SetActive(false);
-
-        feedbackLabel = ModernUIKit.Label(canvas.transform, "Feedback", "", 40, Color.white);
-        feedbackLabel.fontStyle = FontStyles.Bold;
-        feedbackLabel.characterSpacing = 3f;
-        ModernUIKit.Anchor(feedbackLabel.rectTransform, new Vector2(0.5f, 0.58f), new Vector2(0.5f, 0.58f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(860f, 64f));
+        // ---------- Sonuç yazısı ----------
+        feedbackLabel = ModernUIKit.Label(canvas.transform, "Feedback", "", 64, Color.white, ModernUIKit.FontRole.Display);
+        feedbackLabel.fontStyle = FontStyles.Bold | FontStyles.Italic;
+        feedbackLabel.characterSpacing = 6f;
+        feedbackLabel.outlineWidth = 0.15f;
+        feedbackLabel.outlineColor = new Color32(0, 0, 0, 200);
+        ModernUIKit.Anchor(feedbackLabel.rectTransform, new Vector2(0.5f, 0.66f), new Vector2(0.5f, 0.66f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(1100f, 80f));
         feedbackLabel.gameObject.SetActive(false);
+
+        feedbackLine = ModernUIKit.MakeImage(canvas.transform, "FeedbackLine", Color.white, null, false);
+        feedbackLine.sprite = null;
+        feedbackLine.raycastTarget = false;
+        ModernUIKit.Anchor(feedbackLine.rectTransform, new Vector2(0.5f, 0.66f), new Vector2(0.5f, 0.66f), new Vector2(0.5f, 0.5f), new Vector2(0f, -44f), new Vector2(0f, 4f));
+        feedbackLine.gameObject.SetActive(false);
+
+        feedbackSub = ModernUIKit.Label(canvas.transform, "FeedbackSub", "", 20, ModernUIKit.Dim, ModernUIKit.FontRole.Title);
+        feedbackSub.characterSpacing = 8f;
+        ModernUIKit.Anchor(feedbackSub.rectTransform, new Vector2(0.5f, 0.66f), new Vector2(0.5f, 0.66f), new Vector2(0.5f, 0.5f), new Vector2(0f, -66f), new Vector2(800f, 28f));
+        feedbackSub.gameObject.SetActive(false);
     }
 
-    void OnEnergyClicked()
+    void OnSkillPressed()
     {
-        if (skill == null) return;
-        if (skill.CanActivate) skill.PlayerRequestSkill();
+        if (skill != null && skill.CanActivate) skill.PlayerRequestSkill();
     }
 
     public void OpenTimingBar()
     {
         timingOpen = true;
+        timingOpenedAt = Time.unscaledTime;
         timingRoot.SetActive(true);
-        needlePos = Random.Range(0.05f, 0.2f);
+        needlePos = Random.Range(0.03f, 0.15f);
         needleDir = 1f;
-        greenCenter = Random.Range(0.42f, 0.62f);
-        greenHalf = 0.085f;
-        needleSpeed = Random.Range(1.15f, 1.55f);
+        greenCenter = Random.Range(0.45f, 0.75f);
+        greenHalf = 0.06f;
+        needleSpeed = Random.Range(1.2f, 1.55f);
 
-        RectTransform bar = timingRoot.transform.Find("TimingPanel/BarBg") as RectTransform;
-        if (bar == null)
-        {
-            Transform p = timingRoot.transform.Find("TimingPanel");
-            if (p != null) bar = p.Find("BarBg") as RectTransform;
-        }
-        if (bar == null) return;
-
-        ModernUIKit.Anchor(greenZone.rectTransform, new Vector2(greenCenter - greenHalf, 0.12f), new Vector2(greenCenter + greenHalf, 0.88f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
-
-        Transform goodT = bar.Find("GoodZone");
-        if (goodT != null)
-        {
-            float half = greenHalf * 2.1f;
-            ModernUIKit.Anchor(goodT.GetComponent<RectTransform>(), new Vector2(greenCenter - half, 0.12f), new Vector2(greenCenter + half, 0.88f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
-        }
+        float good = greenHalf * 2.2f;
+        ModernUIKit.Anchor(goodZone.rectTransform, new Vector2(greenCenter - good, 0f), new Vector2(greenCenter + good, 1f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+        ModernUIKit.Anchor(perfectZone.rectTransform, new Vector2(greenCenter - greenHalf, 0f), new Vector2(greenCenter + greenHalf, 1f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+        timingTitle.color = Color.Lerp(TypeCol, Color.white, 0.3f);
     }
 
     void LockTiming()
     {
         if (!timingOpen || skill == null) return;
+        // Açılış dokunuşu kilitlemesin
+        if (Time.unscaledTime - timingOpenedAt < 0.12f) return;
         timingOpen = false;
         timingRoot.SetActive(false);
 
         float dist = Mathf.Abs(needlePos - greenCenter);
         float quality;
-        if (dist <= greenHalf * 0.45f) quality = 1f;
+        if (dist <= greenHalf * 0.5f) quality = 1f;
         else if (dist <= greenHalf) quality = 0.82f;
-        else if (dist <= greenHalf * 2.1f) quality = 0.55f;
+        else if (dist <= greenHalf * 2.2f) quality = 0.55f;
         else if (dist <= 0.35f) quality = 0.32f;
         else quality = 0.18f;
 
@@ -204,114 +209,130 @@ public class SkillUI : MonoBehaviour
         if (feedbackLabel == null) return;
         string rank;
         Color col;
-        if (quality >= 0.95f) { rank = "MUKEMMEL"; col = ModernUIKit.Gold; }
-        else if (quality >= 0.75f) { rank = "HARIKA"; col = ModernUIKit.Battle; }
-        else if (quality >= 0.5f) { rank = "IYI"; col = ModernUIKit.Cyan; }
+        if (quality >= 0.95f) { rank = "MÜKEMMEL"; col = ModernUIKit.Gold; }
+        else if (quality >= 0.75f) { rank = "HARİKA"; col = ModernUIKit.Battle; }
+        else if (quality >= 0.5f) { rank = "İYİ"; col = ModernUIKit.Cyan; }
         else if (quality >= 0.3f) { rank = "ZAYIF"; col = ModernUIKit.Heat; }
-        else { rank = "KOTU"; col = ModernUIKit.Danger; }
+        else { rank = "KAÇTI"; col = ModernUIKit.Danger; }
 
-        string skillName = type == BeybladeType.Saldiri ? "HUCUM"
-            : type == BeybladeType.Savunma ? "KALKAN"
-            : type == BeybladeType.Dayaniklilik ? "REGEN"
-            : "BURST";
-
-        feedbackLabel.text = rank + "  ·  " + skillName;
+        feedbackLabel.text = rank;
         feedbackLabel.color = col;
         feedbackLabel.gameObject.SetActive(true);
-        feedbackLabel.transform.localScale = Vector3.one * 1.08f;
+        feedbackLabel.transform.localScale = Vector3.one * 1.25f;
 
-        if (feedbackGlow != null)
-        {
-            feedbackGlow.gameObject.SetActive(true);
-            feedbackGlow.color = new Color(col.r, col.g, col.b, 0.22f);
-        }
+        feedbackSub.text = ModernUIKit.SkillName(type) + "  ·  " + Mathf.RoundToInt(quality * 100f) + "%";
+        feedbackSub.gameObject.SetActive(true);
 
-        feedbackTimer = 1.5f;
+        feedbackLine.color = col;
+        feedbackLine.gameObject.SetActive(true);
+        feedbackLine.rectTransform.sizeDelta = new Vector2(0f, 4f);
+
+        feedbackTimer = 1.4f;
     }
 
     void Update()
     {
-        if (skill == null || energyFill == null) return;
+        if (skill == null || energyRing == null) return;
+        float udt = Time.unscaledDeltaTime;
+        Color tc = TypeCol;
 
-        float ratio = skill.EnergyRatio;
-        energyFill.fillAmount = ratio;
-        energyLabel.text = Mathf.RoundToInt(ratio * 100f) + "%";
-
-        BeybladeController bey = skill.GetComponent<BeybladeController>();
-        if (skillNameLabel != null && bey != null)
+        // ---------- Klavye / gamepad ----------
+        Keyboard kb = Keyboard.current;
+        Gamepad gp = Gamepad.current;
+        if (!timingOpen)
         {
-            skillNameLabel.text = bey.beybladeType == BeybladeType.Saldiri ? "HUCUM RUSH"
-                : bey.beybladeType == BeybladeType.Savunma ? "KALKAN"
-                : bey.beybladeType == BeybladeType.Dayaniklilik ? "REGEN"
-                : "BURST";
-        }
-
-        bool ready = skill.phase == SkillSystem.Phase.Ready;
-        bool active = skill.phase == SkillSystem.Phase.Active;
-        Color fillCol = active ? ModernUIKit.Heat : (ready ? ModernUIKit.Battle : ModernUIKit.Cyan);
-        energyFill.color = fillCol;
-
-        if (ready)
-        {
-            float pulse = 0.35f + 0.35f * (0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 5f));
-            readyPulse.color = new Color(0.25f, 1f, 0.5f, pulse);
-            hintLabel.text = "DOKUN";
-            hintLabel.color = ModernUIKit.Battle;
-            energyGlow.color = new Color(0.3f, 1f, 0.5f, 0.28f + pulse * 0.35f);
-            energyFrame.transform.localScale = Vector3.one * (1f + pulse * 0.04f);
-        }
-        else if (active)
-        {
-            readyPulse.color = new Color(1f, 0.4f, 0.1f, 0.35f);
-            hintLabel.text = "AKTIF";
-            hintLabel.color = ModernUIKit.Heat;
-            energyFrame.transform.localScale = Vector3.one;
-        }
-        else if (skill.phase == SkillSystem.Phase.Timing)
-        {
-            hintLabel.text = "TIMING";
-            hintLabel.color = ModernUIKit.Gold;
-            readyPulse.color = new Color(1f, 0.85f, 0.2f, 0.3f);
-            energyFrame.transform.localScale = Vector3.one;
+            bool press = (kb != null && (kb.eKey.wasPressedThisFrame || kb.qKey.wasPressedThisFrame))
+                         || (gp != null && gp.buttonNorth.wasPressedThisFrame);
+            if (press) OnSkillPressed();
         }
         else
         {
-            readyPulse.color = new Color(1f, 1f, 1f, 0f);
-            hintLabel.text = "SKILL";
-            hintLabel.color = ModernUIKit.Dim;
-            energyGlow.color = new Color(0.2f, 0.8f, 1f, 0.08f + ratio * 0.22f);
-            energyFrame.transform.localScale = Vector3.one;
+            bool lockPress = (kb != null && (kb.spaceKey.wasPressedThisFrame || kb.eKey.wasPressedThisFrame))
+                             || (gp != null && (gp.buttonSouth.wasPressedThisFrame || gp.buttonNorth.wasPressedThisFrame));
+            if (lockPress) LockTiming();
         }
 
+        // ---------- Buton ----------
+        float ratio = skill.EnergyRatio;
+        bool ready = skill.phase == SkillSystem.Phase.Ready;
+        bool active = skill.phase == SkillSystem.Phase.Active;
+        bool timing = skill.phase == SkillSystem.Phase.Timing;
+        bool launched = bey != null && bey.isLaunched && bey.isSpinning;
+
+        nameLabel.text = bey != null ? ModernUIKit.SkillName(bey.beybladeType) : "ÖZEL";
+        energyRing.fillAmount = active ? 1f : ratio;
+        energyRing.color = active ? Color.white : tc;
+        inner.color = ModernUIKit.WithAlpha(tc, ready ? 0.22f : 0.08f);
+        activeRing.fillAmount = active ? 1f - skill.ActiveRatio : 0f;
+        activeRing.color = ModernUIKit.WithAlpha(tc, 0.9f);
+
+        if (ready)
+        {
+            pulseT = (pulseT + udt * 1.2f) % 1f;
+            float s = 1f + pulseT * 0.22f;
+            readyPulse.rectTransform.localScale = new Vector3(s, s, 1f);
+            readyPulse.color = ModernUIKit.WithAlpha(tc, (1f - pulseT) * 0.8f);
+            glow.color = ModernUIKit.WithAlpha(tc, 0.35f + 0.15f * Mathf.Sin(Time.unscaledTime * 5f));
+            stateLabel.text = "HAZIR";
+            stateLabel.color = tc;
+            nameLabel.color = Color.white;
+            btnRoot.localScale = Vector3.one * (1f + 0.03f * Mathf.Sin(Time.unscaledTime * 5f));
+        }
+        else
+        {
+            readyPulse.color = ModernUIKit.WithAlpha(tc, 0f);
+            glow.color = ModernUIKit.WithAlpha(tc, active ? 0.3f : 0.05f + ratio * 0.12f);
+            btnRoot.localScale = Vector3.one;
+            nameLabel.color = active ? Color.white : new Color(1f, 1f, 1f, 0.55f);
+            if (active) { stateLabel.text = "AKTİF"; stateLabel.color = tc; }
+            else if (timing) { stateLabel.text = "ZAMANLA"; stateLabel.color = ModernUIKit.Gold; }
+            else if (skill.phase == SkillSystem.Phase.Cooldown) { stateLabel.text = "BEKLE"; stateLabel.color = ModernUIKit.Dim; }
+            else { stateLabel.text = Mathf.RoundToInt(ratio * 100f) + "%"; stateLabel.color = ModernUIKit.Dim; }
+        }
+        btnRoot.gameObject.SetActive(launched || active);
+
+        // ---------- Zamanlama iğnesi ----------
         if (timingOpen)
         {
-            needlePos += needleDir * needleSpeed * Time.unscaledDeltaTime;
+            needlePos += needleDir * needleSpeed * udt;
             if (needlePos >= 1f) { needlePos = 1f; needleDir = -1f; }
             if (needlePos <= 0f) { needlePos = 0f; needleDir = 1f; }
-            if (timingNeedle != null)
+            ModernUIKit.Anchor(needle.rectTransform, new Vector2(needlePos, 0f), new Vector2(needlePos, 1f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(6f, 14f));
+            ModernUIKit.Anchor(needleGlow.rectTransform, new Vector2(needlePos, 0.5f), new Vector2(needlePos, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(60f, 60f));
+            bool inPerfect = Mathf.Abs(needlePos - greenCenter) <= greenHalf;
+            needle.color = inPerfect ? ModernUIKit.Gold : Color.white;
+            // Zamanlama açıkken skill fazı değiştiyse (devrilme vb.) kapat
+            if (skill.phase != SkillSystem.Phase.Timing)
             {
-                RectTransform nrt = timingNeedle.rectTransform;
-                nrt.anchorMin = new Vector2(needlePos, 0f);
-                nrt.anchorMax = new Vector2(needlePos, 1f);
-                nrt.anchoredPosition = Vector2.zero;
-                nrt.sizeDelta = new Vector2(5f, 0f);
+                timingOpen = false;
+                timingRoot.SetActive(false);
             }
-
-            if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
-                LockTiming();
         }
 
+        // ---------- Sonuç ----------
         if (feedbackTimer > 0f)
         {
-            feedbackTimer -= Time.unscaledDeltaTime;
-            if (feedbackLabel != null)
-                feedbackLabel.transform.localScale = Vector3.Lerp(feedbackLabel.transform.localScale, Vector3.one, Time.unscaledDeltaTime * 8f);
+            feedbackTimer -= udt;
+            feedbackLabel.transform.localScale = Vector3.Lerp(feedbackLabel.transform.localScale, Vector3.one, udt * 10f);
+            float lineW = Mathf.Lerp(feedbackLine.rectTransform.sizeDelta.x, 520f, udt * 8f);
+            feedbackLine.rectTransform.sizeDelta = new Vector2(lineW, 4f);
+            float a = Mathf.Clamp01(feedbackTimer / 0.35f);
+            SetAlpha(feedbackLabel, a);
+            SetAlpha(feedbackSub, a);
+            feedbackLine.color = ModernUIKit.WithAlpha(feedbackLine.color, a);
             if (feedbackTimer <= 0f)
             {
-                if (feedbackLabel != null) feedbackLabel.gameObject.SetActive(false);
-                if (feedbackGlow != null) feedbackGlow.gameObject.SetActive(false);
+                feedbackLabel.gameObject.SetActive(false);
+                feedbackSub.gameObject.SetActive(false);
+                feedbackLine.gameObject.SetActive(false);
             }
         }
+    }
+
+    static void SetAlpha(TextMeshProUGUI t, float a)
+    {
+        Color c = t.color;
+        t.color = new Color(c.r, c.g, c.b, a);
     }
 
     void OnDestroy()

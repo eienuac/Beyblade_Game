@@ -752,9 +752,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::LaunchSystem
   targetBeyblade: {fileID: 633186553}
-  minFillDuration: 5
-  maxFillDuration: 8
-  maxLaunchForce: 12
+  minFillDuration: 2.4
+  maxFillDuration: 3.4
 --- !u!114 &633186560
 MonoBehaviour:
   m_ObjectHideFlags: 0

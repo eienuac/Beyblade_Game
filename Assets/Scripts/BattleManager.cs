@@ -25,6 +25,7 @@ public class BattleManager : MonoBehaviour
     private bool playerWonMatch;
     private Image accentBar;
     private RectTransform panelRt;
+    private TextMeshProUGUI rematchLabel;
 
     private void Start()
     {
@@ -99,9 +100,23 @@ public class BattleManager : MonoBehaviour
 
         BeybladeCore.MatchOutcome outcome = draw ? BeybladeCore.MatchOutcome.Draw
             : playerWon ? BeybladeCore.MatchOutcome.Win : BeybladeCore.MatchOutcome.Loss;
-        bool ringOut = outcome == BeybladeCore.MatchOutcome.Win && enemy != null && enemy.WasRingedOut;
-        rewardGold = BeybladeCore.MatchRewards.Calculate(outcome, MatchContext.IsCareer, MatchContext.CareerLevel, ringOut);
-        if (PlayerDataManager.Instance != null) PlayerDataManager.Instance.AddGold(rewardGold);
+        bool ringOut = outcome == BeybladeCore.MatchOutcome.Win ? (enemy != null && enemy.WasRingedOut)
+                     : outcome == BeybladeCore.MatchOutcome.Loss && player != null && player.WasRingedOut;
+
+        // Denge testi: sonucu bildir, ödül/ekran yok
+        if (MatchContext.IsBalanceTest)
+        {
+            BalanceTestRunner.Report(outcome, ringOut, Time.timeSinceLevelLoad);
+            return;
+        }
+
+        rewardGold = BeybladeCore.MatchRewards.Calculate(outcome, MatchContext.IsCareer, MatchContext.CareerLevel,
+            outcome == BeybladeCore.MatchOutcome.Win && ringOut);
+        if (PlayerDataManager.Instance != null)
+        {
+            PlayerDataManager.Instance.AddGold(rewardGold);
+            PlayerDataManager.Instance.RecordMatch(outcome == BeybladeCore.MatchOutcome.Win, draw, ringOut);
+        }
 
         playerWonMatch = outcome == BeybladeCore.MatchOutcome.Win;
         if (playerWonMatch) PathingManager.OnMatchWon();
@@ -123,18 +138,18 @@ public class BattleManager : MonoBehaviour
         else if (playerWon)
         {
             bool ringOut = enemy != null && enemy.WasRingedOut;
-            kickerText.text = ringOut ? "RING OUT" : "MAÇ SONUCU";
+            kickerText.text = ringOut ? "ARENA DIŞI" : "SPİN BİTİŞİ";
             resultText.text = "ZAFER";
-            subText.text = ringOut ? "Rakibi arenadan attın." : "Rakibin spinini kestin.";
-            accent = ModernUIKit.Cyan;
+            subText.text = ringOut ? "Rakibi arenadan attın." : "Rakibin dönüşünü bitirdin.";
+            accent = ModernUIKit.Battle;
         }
         else
         {
             bool ringOut = player != null && player.WasRingedOut;
-            kickerText.text = ringOut ? "RING OUT" : "MAÇ SONUCU";
+            kickerText.text = ringOut ? "ARENA DIŞI" : "SPİN BİTİŞİ";
             resultText.text = "YENİLDİN";
-            subText.text = ringOut ? "Arenadan düştün." : "Beyblade'in durdu.";
-            accent = ModernUIKit.Magenta;
+            subText.text = ringOut ? "Arenadan düştün." : "Beyin durdu. Tipini ve fırlatışını değiştirmeyi dene.";
+            accent = ModernUIKit.Danger;
         }
 
         resultText.color = Color.white;
@@ -145,6 +160,8 @@ public class BattleManager : MonoBehaviour
         if (MatchContext.IsCareer)
             rewardText.text += "   ·   KARİYER LV " + MatchContext.CareerLevel;
         rewardText.color = ModernUIKit.Gold;
+        if (rematchLabel != null)
+            rematchLabel.text = MatchContext.IsCareer && playerWonMatch ? "SONRAKİ SEVİYE" : "TEKRAR";
 
         uiCanvas.gameObject.SetActive(true);
         group.alpha = 0f;
@@ -188,45 +205,59 @@ public class BattleManager : MonoBehaviour
         veil.sprite = null;
         veil.color = new Color(0.02f, 0.03f, 0.05f, 0.78f);
 
-        Image glow = ModernUIKit.MakeImage(uiCanvas.transform, "Glow", new Color(0.2f, 0.7f, 1f, 0.12f), ModernUIKit.CircleSprite, false);
+        Image glow = ModernUIKit.MakeImage(uiCanvas.transform, "Glow", new Color(0.2f, 0.7f, 1f, 0.12f), ModernUIKit.GlowSprite, false);
         ModernUIKit.Anchor(glow.rectTransform, new Vector2(0.5f, 0.55f), new Vector2(0.5f, 0.55f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(900, 900));
         glow.raycastTarget = false;
 
         GameObject panel = new GameObject("ResultCard");
         panel.transform.SetParent(uiCanvas.transform, false);
         panelRt = panel.AddComponent<RectTransform>();
-        ModernUIKit.Anchor(panelRt, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(760, 520));
+        ModernUIKit.Anchor(panelRt, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(860, 540));
 
-        Image card = ModernUIKit.MakeImage(panel.transform, "Card", ModernUIKit.Panel);
+        Image card = ModernUIKit.MakeSkewPanel(panel.transform, "Card", new Color(0.03f, 0.05f, 0.1f, 0.94f));
         ModernUIKit.Stretch(card.rectTransform);
 
-        accentBar = ModernUIKit.MakeImage(panel.transform, "Accent", ModernUIKit.Cyan, null, false);
-        ModernUIKit.Anchor(accentBar.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0, -28), new Vector2(120, 4));
-        accentBar.sprite = null;
+        accentBar = ModernUIKit.MakeSkewPanel(panel.transform, "Accent", ModernUIKit.Cyan);
+        ModernUIKit.Anchor(accentBar.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0, -30), new Vector2(160, 8));
 
-        kickerText = ModernUIKit.Label(panel.transform, "Kicker", "MAÇ SONUCU", 18, ModernUIKit.Cyan);
+        kickerText = ModernUIKit.Label(panel.transform, "Kicker", "MAÇ SONUCU", 18, ModernUIKit.Cyan, ModernUIKit.FontRole.Title);
         kickerText.characterSpacing = 14f;
         kickerText.fontStyle = FontStyles.Bold;
-        ModernUIKit.Anchor(kickerText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0, -50), new Vector2(700, 36));
+        ModernUIKit.Anchor(kickerText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0, -52), new Vector2(760, 30));
 
-        resultText = ModernUIKit.Label(panel.transform, "Title", "ZAFER", 92, Color.white);
-        resultText.fontStyle = FontStyles.Bold;
-        resultText.characterSpacing = 10f;
-        ModernUIKit.Anchor(resultText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0, -90), new Vector2(720, 130));
+        resultText = ModernUIKit.Label(panel.transform, "Title", "ZAFER", 110, Color.white, ModernUIKit.FontRole.Display);
+        resultText.fontStyle = FontStyles.Bold | FontStyles.Italic;
+        resultText.characterSpacing = 12f;
+        ModernUIKit.Anchor(resultText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0, -86), new Vector2(800, 130));
 
-        subText = ModernUIKit.Label(panel.transform, "Sub", "", 24, ModernUIKit.Dim);
-        ModernUIKit.Anchor(subText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0, -230), new Vector2(640, 50));
+        subText = ModernUIKit.Label(panel.transform, "Sub", "", 22, ModernUIKit.Dim, ModernUIKit.FontRole.Title);
+        ModernUIKit.Anchor(subText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0, -226), new Vector2(760, 50));
 
-        rewardText = ModernUIKit.Label(panel.transform, "Reward", "", 26, ModernUIKit.Gold);
+        rewardText = ModernUIKit.Label(panel.transform, "Reward", "", 28, ModernUIKit.Gold, ModernUIKit.FontRole.Display);
         rewardText.fontStyle = FontStyles.Bold;
-        ModernUIKit.Anchor(rewardText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0, -290), new Vector2(640, 44));
+        rewardText.characterSpacing = 4f;
+        ModernUIKit.Anchor(rewardText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0, -290), new Vector2(760, 44));
 
-        Button rematch = ModernUIKit.MakeButton(panel.transform, "Rematch", "TEKRAR", ModernUIKit.Cyan, new Vector2(280, 72), RestartGame);
-        ModernUIKit.Anchor(rematch.GetComponent<RectTransform>(), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(1f, 0f), new Vector2(-16, 48), new Vector2(280, 72));
-
-        Button menu = ModernUIKit.MakeButton(panel.transform, "Menu", "MENÜ", ModernUIKit.Dim, new Vector2(280, 72), GoMenu);
-        ModernUIKit.Anchor(menu.GetComponent<RectTransform>(), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 0f), new Vector2(16, 48), new Vector2(280, 72));
+        Button rematch = MakeResultButton(panel.transform, "Rematch", "TEKRAR", ModernUIKit.Cyan, true, new Vector2(-16, 52), new Vector2(1f, 0f), RestartGame);
+        rematchLabel = rematch.GetComponentInChildren<TextMeshProUGUI>();
+        MakeResultButton(panel.transform, "Menu", "MENÜ", ModernUIKit.Dim, false, new Vector2(16, 52), new Vector2(0f, 0f), GoMenu);
 
         uiCanvas.gameObject.SetActive(false);
+    }
+
+    private Button MakeResultButton(Transform parent, string name, string label, Color accent, bool primary, Vector2 pos, Vector2 pivot, UnityEngine.Events.UnityAction onClick)
+    {
+        Image img = ModernUIKit.MakeSkewPanel(parent, name, primary ? accent : new Color(1f, 1f, 1f, 0.08f));
+        img.raycastTarget = true;
+        ModernUIKit.Anchor(img.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), pivot, pos, new Vector2(320, 76));
+        TextMeshProUGUI l = ModernUIKit.Label(img.transform, "L", label, 26, primary ? new Color(0.02f, 0.04f, 0.08f) : Color.white, ModernUIKit.FontRole.Display);
+        l.fontStyle = FontStyles.Bold | FontStyles.Italic;
+        l.characterSpacing = 5f;
+        ModernUIKit.Stretch(l.rectTransform);
+        Button b = img.gameObject.AddComponent<Button>();
+        b.targetGraphic = img;
+        b.onClick.AddListener(onClick);
+        ModernUIKit.AddPressFeedback(b);
+        return b;
     }
 }

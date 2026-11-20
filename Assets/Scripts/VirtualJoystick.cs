@@ -26,15 +26,18 @@ public class VirtualJoystick : MonoBehaviour, IPointerDownHandler, IDragHandler,
         VirtualJoystick js = zone.gameObject.AddComponent<VirtualJoystick>();
         js.area = zone.rectTransform;
 
-        js.baseImg = ModernUIKit.MakeImage(zone.transform, "Base", new Color(0.1f, 0.5f, 0.9f, 0.22f), ModernUIKit.RingSprite, false);
+        Image baseFill = ModernUIKit.MakeImage(zone.transform, "BaseFill", new Color(0.02f, 0.04f, 0.09f, 0.45f), ModernUIKit.DiscSprite, false);
+        baseFill.raycastTarget = false;
+        js.baseImg = ModernUIKit.MakeImage(baseFill.transform, "Base", new Color(0.3f, 0.85f, 1f, 0.35f), ModernUIKit.ThinRingSprite, false);
         js.baseImg.raycastTarget = false;
-        js.baseRt = js.baseImg.rectTransform;
+        ModernUIKit.Stretch(js.baseImg.rectTransform);
+        js.baseRt = baseFill.rectTransform;
         ModernUIKit.Anchor(js.baseRt, Vector2.zero, Vector2.zero, new Vector2(0.5f, 0.5f), new Vector2(200f, 180f), new Vector2(200f, 200f));
 
-        js.knobImg = ModernUIKit.MakeImage(js.baseRt, "Knob", new Color(0.3f, 0.85f, 1f, 0.55f), ModernUIKit.CircleSprite, false);
+        js.knobImg = ModernUIKit.MakeImage(js.baseRt, "Knob", new Color(0.3f, 0.85f, 1f, 0.75f), ModernUIKit.DiscSprite, false);
         js.knobImg.raycastTarget = false;
         js.knobRt = js.knobImg.rectTransform;
-        ModernUIKit.Anchor(js.knobRt, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(96f, 96f));
+        ModernUIKit.Anchor(js.knobRt, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(84f, 84f));
 
         js.origin = js.baseRt.anchoredPosition;
         return js;
@@ -47,7 +50,7 @@ public class VirtualJoystick : MonoBehaviour, IPointerDownHandler, IDragHandler,
             Vector2 fromCorner = local + Vector2.Scale(area.rect.size, area.pivot);
             baseRt.anchoredPosition = fromCorner;
         }
-        baseImg.color = new Color(0.1f, 0.6f, 1f, 0.4f);
+        baseImg.color = new Color(0.3f, 0.85f, 1f, 0.8f);
         OnDrag(e);
     }
 
@@ -66,7 +69,7 @@ public class VirtualJoystick : MonoBehaviour, IPointerDownHandler, IDragHandler,
         Value = Vector2.zero;
         knobRt.anchoredPosition = Vector2.zero;
         baseRt.anchoredPosition = origin;
-        baseImg.color = new Color(0.1f, 0.5f, 0.9f, 0.22f);
+        baseImg.color = new Color(0.3f, 0.85f, 1f, 0.35f);
     }
 
     void OnDisable()

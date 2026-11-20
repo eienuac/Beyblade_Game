@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using BeybladeCore;
 
 /// <summary>
 /// Odak barıyla sınırlı yönlendirme + atılma. Oyuncu ve AI aynı kuralları kullanır.
@@ -39,18 +40,30 @@ public class BeyControl : MonoBehaviour
     bool dashQueued;
     Vector3 queuedDir;
     Vector3 aiSteer;
-    float aiThinkTimer;
+    BotBrain brain;
+    Rigidbody enemyRb;
+
+    /// <summary>Oyuncu mu kontrol ediyor (denge testinde iki taraf da bot).</summary>
+    public bool IsHuman => bey != null && bey.isPlayer && !MatchContext.IsBalanceTest;
+    public BotBrain Brain => brain;
 
     void Awake()
     {
         bey = GetComponent<BeybladeController>();
         rb = GetComponent<Rigidbody>();
+        CombatTuning t = CombatTuning.Default;
+        maxFocus = t.MaxFocus;
+        steerDrainPerSec = t.SteerDrain;
+        regenPerSec = t.FocusRegen;
+        regenDelay = t.FocusRegenDelay;
+        dashCost = t.DashCost;
+        dashCooldown = t.DashCooldown;
         Focus = maxFocus;
     }
 
     void Start()
     {
-        if (bey.isPlayer)
+        if (IsHuman)
         {
             ui = gameObject.AddComponent<ControlUI>();
             ui.Bind(this);
@@ -75,7 +88,7 @@ public class BeyControl : MonoBehaviour
         }
 
         Vector3 wish;
-        if (bey.isPlayer)
+        if (IsHuman)
         {
             wish = ReadPlayerSteer();
             UpdatePlayerAim(wish);
@@ -122,7 +135,7 @@ public class BeyControl : MonoBehaviour
     /// <summary>UI'dan atılma. screenDrag sıfırsa mevcut nişan yönü kullanılır.</summary>
     public void RequestDash(Vector2 screenDrag)
     {
-        if (bey == null || !bey.isPlayer) return;
+        if (!IsHuman) return;
         QueueDash(screenDrag.sqrMagnitude > 0.01f ? CameraRelative(screenDrag.normalized) : AimDirection);
     }
 
@@ -190,7 +203,7 @@ public class BeyControl : MonoBehaviour
         Focus -= dashCost;
         lastUseTime = Time.time;
         lastDashTime = Time.time;
-        bey.Dash(dir, Mathf.Lerp(7f, 10f, bey.AttackNorm));
+        bey.Dash(dir, Combat.DashSpeed(bey.Profile, CombatTuning.Default));
         if (ui != null) ui.OnDash();
         return true;
     }
@@ -263,67 +276,58 @@ public class BeyControl : MonoBehaviour
 
     // ---------------- AI ----------------
 
+    /// <summary>Bot kararları BeybladeCore.BotBrain'de (denge simülasyonuyla aynı beyin).</summary>
     void ThinkAI()
     {
-        aiThinkTimer -= Time.deltaTime;
-        if (aiThinkTimer > 0f) return;
-        BeybladeCore.BotDifficulty diff = MatchContext.Difficulty;
-        aiThinkTimer = Random.Range(diff.ThinkIntervalMin, diff.ThinkIntervalMax);
-        aiSteer = Vector3.zero;
-
-        if (enemy == null || !enemy.isLaunched) enemy = FindEnemy();
-
-        Vector3 vel = rb.linearVelocity;
-        vel.y = 0f;
-
-        // Kenara savruluyorsa merkeze dön; tehlikeliyse atılarak kurtul
-        if (ArenaInfo.Known)
+        if (enemy == null || !enemy.isLaunched)
         {
-            Vector3 fromCenter = transform.position - ArenaInfo.Center;
-            fromCenter.y = 0f;
-            float dist = fromCenter.magnitude;
-            bool outward = Vector3.Dot(vel, fromCenter) > 0f;
-            if (dist > ArenaInfo.Radius * 0.72f && outward)
-            {
-                aiSteer = -fromCenter.normalized;
-                if (diff.UsesEdgeRecovery && dist > ArenaInfo.Radius * 0.85f && vel.magnitude > bey.MaxSpeed * 0.8f && Focus >= dashCost + 10f)
-                    TryDash(-fromCenter);
-                return;
-            }
+            enemy = FindEnemy();
+            enemyRb = enemy != null ? enemy.GetComponent<Rigidbody>() : null;
         }
-
-        if (enemy == null) return;
-        Vector3 toEnemy = enemy.transform.position - transform.position;
-        toEnemy.y = 0f;
-        float d = toEnemy.magnitude;
-        if (d < 0.01f) return;
-
-        switch (bey.beybladeType)
+        if (enemy == null)
         {
-            case BeybladeType.Saldiri:
-            case BeybladeType.Denge:
-                if (d < 4f && d > 1.2f && Focus >= dashCost + 5f && Random.value < diff.DashChance)
-                    TryDash(toEnemy);
-                else if (d > 4f && Focus > 50f)
-                    aiSteer = toEnemy.normalized * 0.7f;
-                break;
-
-            case BeybladeType.Savunma:
-                // Kaçmaz; atılan rakibe karşı merkeze yaslanır
-                if (enemy.IsDashing && d < 3f && Focus > 20f && ArenaInfo.Known)
-                {
-                    Vector3 toCenter = ArenaInfo.Center - transform.position;
-                    toCenter.y = 0f;
-                    if (toCenter.sqrMagnitude > 0.04f) aiSteer = toCenter.normalized * 0.6f;
-                }
-                break;
-
-            case BeybladeType.Dayaniklilik:
-                // Atılan rakibin yolundan yana kayar
-                if (enemy.IsDashing && d < 3f && Focus > 20f)
-                    aiSteer = Vector3.Cross(Vector3.up, toEnemy.normalized);
-                break;
+            aiSteer = Vector3.zero;
+            return;
         }
+        if (brain == null) brain = new BotBrain(MatchContext.Difficulty, Random.Range(1, int.MaxValue));
+
+        Vector3 center = ArenaInfo.Known ? ArenaInfo.Center : Vector3.zero;
+        float radius = ArenaInfo.Known ? ArenaInfo.Radius : CombatTuning.Default.ArenaRadius;
+        Vector3 mp = transform.position - center;
+        Vector3 ep = enemy.transform.position - center;
+        Vector3 mv = rb != null ? rb.linearVelocity : Vector3.zero;
+        Vector3 ev = enemyRb != null ? enemyRb.linearVelocity : Vector3.zero;
+        SkillSystem mySkill = bey.Skill;
+        SkillSystem enSkill = enemy.Skill;
+
+        var obs = new BotObservation
+        {
+            MyPos = new Vec2(mp.x, mp.z),
+            MyVel = new Vec2(mv.x, mv.z),
+            EnemyPos = new Vec2(ep.x, ep.z),
+            EnemyVel = new Vec2(ev.x, ev.z),
+            ArenaRadius = radius,
+            Me = bey.Profile,
+            Enemy = enemy.Profile,
+            MyStaminaRatio = bey.StaminaRatio,
+            EnemyStaminaRatio = enemy.StaminaRatio,
+            Focus = Focus,
+            MaxFocus = maxFocus,
+            DashCost = dashCost,
+            DashReady = CanDash,
+            MyDashSpeed = Combat.DashSpeed(bey.Profile, CombatTuning.Default),
+            EnemyDashing = enemy.IsDashing,
+            SkillReady = mySkill != null && mySkill.phase == SkillSystem.Phase.Ready,
+            EnemySkillActive = enSkill != null && enSkill.IsActive,
+            EnemyShielded = enSkill != null && enSkill.IsShieldActive,
+            EnemyUltDragging = enSkill != null && enSkill.IsUltDragging,
+            MovementLocked = bey.MovementOverridden
+        };
+
+        BotCommand cmd = brain.Tick(obs, Time.deltaTime);
+        aiSteer = new Vector3(cmd.Steer.X, 0f, cmd.Steer.Z);
+        if (cmd.Dash) TryDash(new Vector3(cmd.DashDir.X, 0f, cmd.DashDir.Z));
+        if (cmd.UseSkill && mySkill != null) mySkill.AiActivate(cmd.SkillQuality);
     }
 
     BeybladeController FindEnemy()

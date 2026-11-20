@@ -58,7 +58,7 @@ public class ShopUI : MonoBehaviour
     public void RefreshCurrency()
     {
         if (PlayerDataManager.Instance == null) return;
-        if (goldLabel != null) goldLabel.text = "C  " + PlayerDataManager.Instance.data.gold.ToString("N0");
+        if (goldLabel != null) goldLabel.text = PlayerDataManager.Instance.data.gold.ToString("N0");
         if (gemsLabel != null) gemsLabel.text = "GEM  " + PlayerDataManager.Instance.data.gems.ToString("N0");
     }
 

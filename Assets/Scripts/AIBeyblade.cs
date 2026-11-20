@@ -1,24 +1,24 @@
 using UnityEngine;
+using BeybladeCore;
 
 /// <summary>
-/// Basit Rakip AI: Otomatik fırlatılır ve arenada dolaşır.
+/// Rakip botun fırlatılması. Hareket/taktik kararları BeyControl → BotBrain'dedir.
+/// Oyuncu fırlattıktan kısa süre sonra fırlatır (denge testinde hemen).
 /// </summary>
 public class AIBeyblade : MonoBehaviour
 {
-    [Header("AI Ayarları")]
-    [Tooltip("Kullanılmıyor: fırlatma gücü artık MatchContext.Difficulty'den gelir")]
-    public float aiPower = 0.75f;
-
-    [Tooltip("Fırlatma gecikmesi (saniye - SADECE OYUNCU FIRLATTIKTAN SONRA SAYAR)")]
+    [Tooltip("Fırlatma gecikmesi (oyuncu fırlattıktan sonra)")]
     public float launchDelay = 0.2f;
 
-    [Tooltip("Fırlatma kuvveti")]
-    public float launchForce = 12f;
+    [Header("Hızlı savaş fırlatma gücü (oyuncuya yakın)")]
+    public float quickMatchPowerMin = 0.72f;
+    public float quickMatchPowerMax = 0.92f;
 
     private BeybladeController beyblade;
+    private BeybladeController player;
     private Rigidbody rb;
     private bool launched = false;
-    private bool playerHasLaunched = false;
+    private bool queued = false;
 
     private void Start()
     {
@@ -31,57 +31,72 @@ public class AIBeyblade : MonoBehaviour
             beyblade.isSpinning = true;
             if (rb != null) rb.isKinematic = true;
         }
+
+        if (MatchContext.IsBalanceTest)
+        {
+            queued = true;
+            Invoke(nameof(LaunchAI), 0.05f);
+        }
     }
 
     private void Update()
     {
-        if (launched) return;
+        if (launched || queued) return;
 
-        // Oyuncunun fırlatıp fırlatmadığını kontrol et
-        if (!playerHasLaunched)
+        if (player == null)
         {
-            GameObject player = GameObject.Find("PlayerBeyblade");
-            if (player != null)
-            {
-                BeybladeController pControl = player.GetComponent<BeybladeController>();
-                if (pControl != null && pControl.isLaunched)
-                {
-                    playerHasLaunched = true;
-                    // Oyuncu fırlattıktan kısa süre sonra biz de fırlatılıyoruz
-                    Invoke("LaunchAI", launchDelay);
-                }
-            }
+            GameObject p = GameObject.Find("PlayerBeyblade");
+            if (p != null) player = p.GetComponent<BeybladeController>();
         }
+        if (player != null && player.isLaunched)
+        {
+            queued = true;
+            Invoke(nameof(LaunchAI), launchDelay);
+        }
+    }
+
+    float PickPower()
+    {
+        if (MatchContext.IsBalanceTest) return Random.Range(0.7f, 0.95f);
+        if (!MatchContext.IsCareer) return Random.Range(quickMatchPowerMin, quickMatchPowerMax);
+        BotDifficulty diff = MatchContext.Difficulty;
+        return Random.Range(diff.LaunchPowerMin, diff.LaunchPowerMax);
     }
 
     private void LaunchAI()
     {
-        if (launched) return;
+        if (launched || beyblade == null) return;
         launched = true;
+        Launch(beyblade, PickPower());
+    }
 
-        if (rb != null) rb.isKinematic = false;
+    /// <summary>Oyuncu ve bot için ortak fırlatma (stamina, RPM, itki aynı formülle).</summary>
+    public static void Launch(BeybladeController bey, float power)
+    {
+        if (bey == null) return;
+        CombatTuning t = CombatTuning.Default;
+        power = Mathf.Clamp(power, 0.08f, 1f);
 
-        // Arenanın merkezine doğru fırlat
-        Vector3 launchDir = (Vector3.zero - transform.position).normalized;
-        launchDir.y = -0.2f;
-        launchDir = launchDir.normalized;
-
-        // Güç bot seviyesine göre (kariyerde artar)
-        BeybladeCore.BotDifficulty diff = MatchContext.Difficulty;
-        float power = Random.Range(diff.LaunchPowerMin, diff.LaunchPowerMax);
-        power = Mathf.Clamp(power, 0.4f, 1f); // Minimum 0.4f güç ile merkeze süzülsün
-
-        if (rb != null) rb.AddForce(launchDir * launchForce * power, ForceMode.Impulse);
-
-        if (beyblade != null)
+        Rigidbody body = bey.GetComponent<Rigidbody>();
+        if (body != null)
         {
-            beyblade.currentStamina = beyblade.maxStamina * power;
-            beyblade.currentSpinRPM = beyblade.maxSpinRPM * power;
-            beyblade.isLaunched = true;
-            beyblade.isSpinning = true;
-            
-            CapsuleCollider col = beyblade.GetComponent<CapsuleCollider>();
-            if (col != null) col.enabled = true;
+            body.isKinematic = false;
+            Vector3 center = ArenaInfo.Known ? ArenaInfo.Center : Vector3.zero;
+            Vector3 dir = center - bey.transform.position;
+            dir.y = 0f;
+            if (dir.sqrMagnitude < 0.01f) dir = Vector3.forward;
+            dir.Normalize();
+            // Hafif açı sapması: her fırlatış aynı çizgide olmasın
+            dir = Quaternion.AngleAxis(Random.Range(-14f, 14f), Vector3.up) * dir;
+            body.AddForce(dir * (t.LaunchImpulse * power), ForceMode.Impulse);
         }
+
+        float spin = Combat.LaunchSpinFraction(power, t);
+        bey.currentStamina = bey.maxStamina * spin;
+        bey.currentSpinRPM = bey.maxSpinRPM * spin;
+        bey.isLaunched = true;
+        bey.isSpinning = true;
+        CapsuleCollider col = bey.GetComponent<CapsuleCollider>();
+        if (col != null) col.enabled = true;
     }
 }
