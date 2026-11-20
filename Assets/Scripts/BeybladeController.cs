@@ -627,7 +627,15 @@ public class BeybladeController : MonoBehaviour
         if (!stunned)
         {
             // Tipin kendi hareketi: Saldırı dış halkada hızlı tur, Denge orta halka, Dayanıklılık merkeze yakın süzülme, Savunma merkezi tutar
-            Vec2 auto = Movement.AutoAccel(movementProfile, pos, vel, arenaRadius, RpmRatio, orbitSign);
+            // Rakibe dalgalı çekim: gelir, çarpışır, açılır, tekrar gelir (kilitlenmeden)
+            bool hasEnemy = enemyTarget != null && enemyTarget.isLaunched && !enemyTarget.hasToppled;
+            float engage = hasEnemy ? Movement.EngageWeight(movementProfile, Time.time, noiseSeed) : 0f;
+            Vec2 auto = Movement.AutoAccel(movementProfile, pos, vel, arenaRadius, RpmRatio, orbitSign, engage);
+            if (hasEnemy)
+            {
+                Vector3 ep = enemyTarget.transform.position - center;
+                auto += Movement.EngageAccel(movementProfile, pos, vel, new Vec2(ep.x, ep.z), RpmRatio, engage);
+            }
             if (steering) auto *= 0.35f;
             rb.AddForce(new Vector3(auto.X, 0f, auto.Z), ForceMode.Acceleration);
 

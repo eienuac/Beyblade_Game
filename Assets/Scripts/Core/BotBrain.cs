@@ -68,6 +68,12 @@ namespace BeybladeCore
         float Range(float a, float b) => a + (float)rng.NextDouble() * (b - a);
         bool Chance(float p) => rng.NextDouble() < p;
 
+        /// <summary>Savunmanın dayanıklılık tipine baskı yapma isteği (0..1). Denge ayarı.</summary>
+        public static float PressIntensity = 0.6f;
+
+        /// <summary>Denge botunun dayanıklılık tipine karşı sabrı (0..1). Denge ayarı.</summary>
+        public static float BalancePatience = 0.85f;
+
         float AimError => BeyStatCalculator.Lerp(0.38f, 0.05f, Difficulty.T);
 
         public BotCommand Tick(in BotObservation o, float dt)
@@ -217,7 +223,9 @@ namespace BeybladeCore
                     if (stateTimer <= 0f && o.Focus >= o.DashCost + 25f && d < 0.95f * R * 2f)
                     {
                         // Savunmaya karşı sabırlı ol: merkezdeki savunmaya kafa atma
-                        bool waitForOpening = enemyIsWall && enemyR < 0.3f * R && Chance(0.45f);
+                        bool waitForOpening = (enemyIsWall && enemyR < 0.3f * R && Chance(0.45f))
+                                              || (o.Me.Archetype == BeyArchetype.Balance && o.Enemy.Archetype == BeyArchetype.Stamina
+                                                  && Chance(BalancePatience));
                         if (waitForOpening)
                         {
                             stateTimer = Range(0.6f, 1.4f);
@@ -306,7 +314,8 @@ namespace BeybladeCore
             }
 
             // Dayanıklılık tipine karşı bekleyen kaybeder: ağırlığını kullanıp baskı yap
-            bool enemyOutlasts = o.Enemy.Archetype == BeyArchetype.Stamina || o.EnemyStaminaRatio > o.MyStaminaRatio + 0.12f;
+            bool enemyOutlasts = (o.Enemy.Archetype == BeyArchetype.Stamina && Chance(PressIntensity))
+                                 || o.EnemyStaminaRatio > o.MyStaminaRatio + 0.12f;
             if (enemyOutlasts)
             {
                 if (d < 3.2f && o.DashReady && o.Focus >= o.DashCost + 15f && Chance(Difficulty.DashChance + 0.1f))

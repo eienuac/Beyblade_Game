@@ -15,10 +15,10 @@ namespace BeybladeCore
         public float MaxStamina = 160f;
         /// <summary>Saniyede doğal stamina kaybı (tipe göre çarpanlarla).</summary>
         public float BaseDrain = 1.55f;
-        public float DrainStaminaBest = 0.86f;   // S=1 iken çarpan
-        public float DrainStaminaWorst = 1.25f;  // S=0 iken çarpan
+        public float DrainStaminaBest = 0.677f;   // S=1 iken çarpan
+        public float DrainStaminaWorst = 1.318f;  // S=0 iken çarpan
         public float DrainAttackLow = 0.92f;     // A=0 iken çarpan
-        public float DrainAttackHigh = 1.12f;    // A=1 iken çarpan (agresif dönüş daha çok yorar)
+        public float DrainAttackHigh = 1.036f;    // A=1 iken çarpan (agresif dönüş daha çok yorar)
 
         // ---- Çarpışma ----
         public float Restitution = 0.55f;
@@ -27,10 +27,10 @@ namespace BeybladeCore
         public float ImpactMinSpeed = 0.6f;
         public float ImpactMin = 0.12f;
         public float ImpactMax = 1.6f;
-        public float MitigationDefense = 0.76f;
-        public float MitigationWeight = 0.21f;
+        public float MitigationDefense = 0.64f;
+        public float MitigationWeight = 0.165f;
         /// <summary>Saldıran taraf ağır/savunmacı rakibe çarpınca kendisi de hasar alır.</summary>
-        public float RecoilScale = 0.25f;
+        public float RecoilScale = 0.6f;
         public float RecoilDefense = 2.0f;
         public float RecoilWeight = 1.6f;
         public float AggressorMargin = 0.4f;
@@ -38,7 +38,7 @@ namespace BeybladeCore
         /// <summary>Ağır bey hafife daha sert vurur: vuruş *= (kütle oranı)^MassExponent.</summary>
         public float MassExponent = 0.02f;
         public float KnockBase = 1.0f;
-        public float KnockScale = 0.285f;
+        public float KnockScale = 0.332f;
         public float KnockResistPerDefense = 0.45f;
         public float CollisionCooldown = 0.12f;
 
@@ -70,10 +70,10 @@ namespace BeybladeCore
         public float BowlPull = 3.2f;
         public float WallRestitution = 0.35f;
         /// <summary>Duvara bu hızdan hızlı dışa doğru çarpan bey arenadan çıkar.</summary>
-        public float RingOutSpeed = 10f;
+        public float RingOutSpeed = 10.12f;
 
         // ---- Skill enerjisi ----
-        public float SkillPassiveEnergy = 2.55f;
+        public float SkillPassiveEnergy = 2.94f;
         public float SkillCollisionEnergy = 5f;
         public float SkillCooldown = 3f;
     }
@@ -126,8 +126,8 @@ namespace BeybladeCore
             {
                 case BeyArchetype.Attack: return new FighterProfile(type, 0.78f, 0.22f, 0.32f, 0.22f);
                 case BeyArchetype.Defense: return new FighterProfile(type, 0.185f, 0.785f, 0.35f, 0.78f);
-                case BeyArchetype.Stamina: return new FighterProfile(type, 0.16f, 0.24f, 0.92f, 0.23f);
-                default: return new FighterProfile(type, 0.46f, 0.42f, 0.44f, 0.45f);
+                case BeyArchetype.Stamina: return new FighterProfile(type, 0.16f, 0.24f, 0.92f, 0.31f);
+                default: return new FighterProfile(type, 0.42f, 0.42f, 0.48f, 0.45f);
             }
         }
 

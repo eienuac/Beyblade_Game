@@ -261,9 +261,9 @@ namespace BeybladeCore.Tests
     {
         const int Matches = 300;
 
-        static float WinRate(BeyArchetype a, BeyArchetype b, int level = 5)
+        static float WinRate(BeyArchetype a, BeyArchetype b, int level = 5, bool excludeDraws = false)
         {
-            int wins = 0;
+            int wins = 0, decided = 0;
             BotDifficulty d = BotDifficulty.ForLevel(level);
             for (int i = 0; i < Matches; i++)
             {
@@ -283,7 +283,9 @@ namespace BeybladeCore.Tests
                 };
                 SimResult r = new BattleSim(s).Run();
                 if (r.Winner == (swap ? 1 : 0)) wins++;
+                if (r.Winner != -1) decided++;
             }
+            if (excludeDraws) return decided > 0 ? 100f * wins / decided : 50f;
             return 100f * wins / Matches;
         }
 
@@ -348,8 +350,34 @@ namespace BeybladeCore.Tests
         {
             foreach (BeyArchetype t in new[] { BeyArchetype.Attack, BeyArchetype.Defense, BeyArchetype.Stamina, BeyArchetype.Balance })
             {
-                float wr = WinRate(t, t);
-                Assert.That(wr, Is.InRange(38f, 62f), t + " ayna maç: " + wr);
+                // Beraberlikler (iki bey birden düşer/durursa) hariç: taraflar eşit şansa sahip olmalı
+                float wr = WinRate(t, t, 5, excludeDraws: true);
+                Assert.That(wr, Is.InRange(40f, 60f), t + " ayna maç: " + wr);
+            }
+        }
+
+        [Test]
+        public void Beys_SeekEachOther_EvenWithoutInput()
+        {
+            // Oyuncu hiç dokunmasa bile beyler birbirine gelip çarpışmalı (çekim dalgası)
+            foreach (BeyArchetype player in new[] { BeyArchetype.Balance, BeyArchetype.Attack, BeyArchetype.Stamina, BeyArchetype.Defense })
+            {
+                float collisions = 0f, time = 0f;
+                for (int i = 0; i < 40; i++)
+                {
+                    var s = new SimSetup
+                    {
+                        A = ArchetypePresets.Get(player), B = ArchetypePresets.Get(BeyArchetype.Defense),
+                        PowerA = 0.85f, PowerB = 0.85f,
+                        BrainA = BotDifficulty.ForLevel(5), BrainB = BotDifficulty.ForLevel(5),
+                        Seed = i * 13 + 5, MaxTime = 240f, PassiveA = true
+                    };
+                    SimResult r = new BattleSim(s).Run();
+                    collisions += r.Collisions;
+                    time += r.Duration;
+                }
+                float perMinute = collisions / time * 60f;
+                Assert.GreaterOrEqual(perMinute, 10f, player + " (dokunmayan oyuncu) vs Savunma: dakikada " + perMinute + " çarpışma");
             }
         }
 

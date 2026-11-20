@@ -27,6 +27,8 @@ namespace BeybladeCore
         public BotDifficulty BrainA, BrainB;
         public int Seed;
         public float MaxTime;
+        /// <summary>A tarafı hiç yönlendirmez/atılmaz/skill kullanmaz (dokunmayan oyuncu): sadece otomatik hareket.</summary>
+        public bool PassiveA;
     }
 
     /// <summary>
@@ -53,6 +55,7 @@ namespace BeybladeCore
             public float LastFocusUse = -10f, LastDash = -10f;
             public float DashUntil, OverspeedUntil, OverspeedMult = 1f, StunUntil;
             public float OrbitSign;
+            public float WavePhase;
             public bool Out, Toppled;
 
             public SkillPhase Phase;
@@ -104,7 +107,8 @@ namespace BeybladeCore
                 MaxStamina = tune.MaxStamina,
                 Stamina = tune.MaxStamina * Combat.LaunchSpinFraction(power, tune),
                 Focus = tune.MaxFocus,
-                OrbitSign = rng.NextDouble() < 0.5 ? 1f : -1f
+                OrbitSign = rng.NextDouble() < 0.5 ? 1f : -1f,
+                WavePhase = (float)(rng.NextDouble() * Math.PI * 2.0)
             };
             Vec2 toCenter = (-pos).Normalized;
             // Fırlatmada hafif açı sapması
@@ -167,6 +171,13 @@ namespace BeybladeCore
         void Control(Fighter me, Fighter en)
         {
             if (!me.Alive) return;
+            if (setup.PassiveA && me == f[0])
+            {
+                steerCache[0] = Vec2.Zero;
+                if (time - me.LastFocusUse >= tune.FocusRegenDelay)
+                    me.Focus = Math.Min(tune.MaxFocus, me.Focus + tune.FocusRegen * Dt);
+                return;
+            }
 
             bool dashReady = !me.Overridden && me.Focus >= tune.DashCost && time - me.LastDash >= tune.DashCooldown;
             var obs = new BotObservation
@@ -422,7 +433,9 @@ namespace BeybladeCore
             {
                 if (!stunned)
                 {
-                    Vec2 auto = Movement.AutoAccel(me.Move, me.Pos, me.Vel, R, me.Rpm, me.OrbitSign);
+                    float engage = en.Alive ? Movement.EngageWeight(me.Move, time, me.WavePhase) : 0f;
+                    Vec2 auto = Movement.AutoAccel(me.Move, me.Pos, me.Vel, R, me.Rpm, me.OrbitSign, engage);
+                    if (en.Alive) auto += Movement.EngageAccel(me.Move, me.Pos, me.Vel, en.Pos, me.Rpm, engage);
                     a += auto * (steering ? 0.35f : 1f);
                     // Hafif yalpa
                     a += new Vec2((float)(rng.NextDouble() - 0.5), (float)(rng.NextDouble() - 0.5)) * (2f * me.Move.Wander);
